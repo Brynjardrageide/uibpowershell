@@ -4,17 +4,18 @@
 
 #dette er forhonds arbeide til domene controlleren
 
-$varipadress = Read-Host "Enter the IP address" 
-$varComputername = Read-Host "Enter the computer name"
-$deafaultgateway = Read-Host "Enter the default gateway"
+$varipadress = 192.168.1.30 
+$varComputername = "DC1"
+$deafaultgateway = 192.168.1.1
 
 # Iimens jeg promonterer serveren
-$DOMAIN = Read-Host "Enter the domain name for organization"
-$NETBIOSDOMAIN = Read-Host "Enter the NetBIOS name for the domain. SÅ DET SAME ALL UPPER CASE OG INGEN PUNKTUM NOE TOP DOMENE"
+$DOMAIN = "example.com"
+$NETBIOSDOMAIN = "EXAMPLE"
 
 $Action = New-ScheduledTaskAction -Execute tasklaterdm
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $TaskName = "Promote to DC"
+# this failed as yo cant call functions from schduled tasks next try wil be a extra ps1file
 Register-ScheduledTask -Action $Action -Trigger $Trigger -TaskName $TaskName -Description "Promote server to domain controller at startup"
 
 #PROMENTERING AV SEREVER
@@ -25,23 +26,23 @@ New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress $varipadress -PrefixLengt
 
 # klargjør serveren for å bli en domene controller
 
-#Install the AD DS role
-Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools 
 
-# import the ADDSDeployment module før seting av domenet
-Install-Module ADDSDeployment
-
+# this sectin fained as yo cant call functions from schduled tasks next try wil be a extra ps1file
 #Promote the server to a domain controller
 function tasklaterdm {
-    Install-ADDSForest`
-    -DomainName $DOMAIN `
-    -DomainNetbiosName $NETBIOSDOMAIN `
-    -SafeModeAdministratorPassword (Read-Host -AsSecureString "Enter the DSRM password") `
-    -Force `
-    -NoRebootOnCompletion`
+        #Install the AD DS role
+    Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools 
+
+    # import the ADDSDeployment module før seting av domenet
+    Install-Module ADDSDeployment
+        Install-ADDSForest`
+            -DomainName $DOMAIN `
+            -DomainNetbiosName $NETBIOSDOMAIN `
+            -SafeModeAdministratorPassword (-AsSecureString "Passord01!") `
+            -Force `
+            -NoRebootOnCompletion`
 
 }
-
 
 #Restart the server to complete the promotion
 Restart-Computer
