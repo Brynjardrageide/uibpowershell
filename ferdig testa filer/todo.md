@@ -2,6 +2,7 @@
 
 ## ideas
 - auto rdp
+- auto join domain **note:** dette måbåde være script og iso
 
 ## underway
 
