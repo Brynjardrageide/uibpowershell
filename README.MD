@@ -5,6 +5,7 @@ Dette repositoriet inneholder PowerShell-skript for å sette opp en domenekontro
 ## Oversikt
 
 Disse skriptene er resultatet av testing av forskjellige metoder, som har ført til en standard fremgangsmåte for oppsett av domenekontroller.
+[se her for mer info om test filer](testfioler\mapestruktur.md)
 
 ## Funksjoner
 

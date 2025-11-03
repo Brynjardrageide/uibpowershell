@@ -5,7 +5,8 @@
 #dette er forhonds arbeide til domene controlleren
 
 $varipadress = "192.168.1.30"
-$varComputername = "DC1"
+# Change computer name as needed UNDER TESTING IT WAS C1 ive changed it as it wil be in production soon
+$varComputername = "dmmasterdc1"
 $deafaultgateway  = "192.168.1.1"
 
 
