@@ -30,4 +30,21 @@ $SyncfieldMap = @{
     FirstName="GivenName"
     LastName="Surname"
 }
-Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
+# Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
+$userinfo = Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
+foreach ($user in $userinfo) {
+    $OU = "OU=brukere,OU=users,OU=drageideou's,DC=drageide,DC=com"
+    $Domain = "drageide.com"
+    $Email = "$($user.Givenname).$($user.Surname)@$Domain"
+    New-ADUser`
+        -EmployeeID $user.EmployeeID`
+        -GivenName $user.GivenName`
+        -Surname $user.Surname`
+        -Name "$($user.GivenName) $($user.Surname)"`
+        -Path $OU `
+        -EmailAddress $Email `
+        -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) -Enabled $true`
+        -Enabled $true `
+        -PasswordNeverExpires $false `
+        -ChangePasswordAtLogon $false
+}
