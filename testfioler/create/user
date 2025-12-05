@@ -7,7 +7,7 @@ $LastName = Read-Host "Enter last name"
 $Password = ConvertTo-SecureString "Password01!" -AsPlainText -Force
 $Domain = "drageide.com"
 $Email = "$FirstName.$LastName@$Domain"
-$OU = "OU=Users,OU=Company,DC=drageide,DC=com"
+$OU = "OU=brukere,OU=users,OUdrageideou's,DC=drageide,DC=com"
 
 # Create the user
 New-ADUser `
