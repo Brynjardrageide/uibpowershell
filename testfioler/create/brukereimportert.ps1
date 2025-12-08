@@ -38,6 +38,7 @@ foreach ($user in $userinfo) {
     $Email = "$($user.Givenname).$($user.Surname)@$Domain"
     New-ADUser `
         -EmployeeID $user.EmployeeID `
+        -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
         -GivenName $user.GivenName `
         -Surname $user.Surname `
         -Name "$($user.GivenName) $($user.Surname)" `
