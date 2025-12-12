@@ -42,7 +42,7 @@ foreach ($user in $userinfo) {
         -GivenName $user.GivenName `
         -Surname $user.Surname `
         -Name "$($user.GivenName) $($user.Surname)" `
-        -SamAccountName "$($user.GivenName.Substring(0,3)).$($user.Surname.Substring(0,2))" `
+        -SamAccountName "$($user.GivenName.Substring(0,2)).$($user.Surname.Substring(0,3))" `
         -Path $OU `
         -EmailAddress $Email `
         -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) `
