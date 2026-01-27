@@ -7,8 +7,7 @@ Run on: The FILE SERVER (as Administrator)
 
 param(
     [string]$FolderPath = 'C:\Shares\HomeShare',
-    [string]$ShareName  = 'HomeShare$',
-    [switch]$HideFolder = $true
+    [string]$ShareName  = 'HomeShare$'
 )
 
 # Accounts
