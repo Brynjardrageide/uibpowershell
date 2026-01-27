@@ -1,89 +1,96 @@
 
 <#
-Script: foldersHomeSHARE.ps1
-Purpose: Create home folder share root with proper NTFS + SMB permissions.
-Run as Administrator.
+Script: Create-HomeShareRoot.ps1
+Purpose: Create the root folder and share for home directories with correct permissions.
+Run on: The FILE SERVER (as Administrator)
 #>
 
 param(
     [string]$FolderPath = 'C:\Shares\HomeShare',
     [string]$ShareName  = 'HomeShare$',
-    [string]$domain     = 'DRAGEIDE'
+    [switch]$HideFolder = $true
 )
 
-# Account objects
-$admins  = New-Object System.Security.Principal.NTAccount('Administrators')
-$system  = New-Object System.Security.Principal.NTAccount('SYSTEM')
-$auth    = New-Object System.Security.Principal.NTAccount('Authenticated Users')
+# Accounts
+$admins  = New-Object System.Security.Principal.NTAccount('BUILTIN','Administrators')
+$system  = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','SYSTEM')
+$auth    = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','Authenticated Users')
 $creator = New-Object System.Security.Principal.NTAccount('CREATOR OWNER')
 
-# Inheritance flags
+# Flags
 $CI = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit
 $OI = [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
 $NoneInherit = [System.Security.AccessControl.InheritanceFlags]::None
-
 $InheritOnly = [System.Security.AccessControl.PropagationFlags]::InheritOnly
 $NoneProp    = [System.Security.AccessControl.PropagationFlags]::None
 
-# Admin check
+# Ensure admin
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-        [Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "This script must be run as Administrator."
+    [Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "Run as Administrator."
     exit 1
 }
 
 # Create folder
 New-Item -Path $FolderPath -ItemType Directory -Force | Out-Null
+if ($HideFolder) {
+    $item = Get-Item $FolderPath
+    $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
+}
 
-# Hide folder (optional)
-(Get-Item $FolderPath).Attributes = (Get-Item $FolderPath).Attributes -bor 'Hidden'
+# Create / fix share (Change for Authenticated Users)
+if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
+    New-SmbShare `
+        -Name $ShareName `
+        -Path $FolderPath `
+        -FullAccess "BUILTIN\Administrators","NT AUTHORITY\SYSTEM" `
+        -ChangeAccess "NT AUTHORITY\Authenticated Users" `
+        -FolderEnumerationMode AccessBased `
+        -CachingMode None `
+        -Description "Home Share Root" | Out-Null
+} else {
+    Set-SmbShare -Name $ShareName -FolderEnumerationMode AccessBased -CachingMode None
+    Revoke-SmbShareAccess -Name $ShareName -AccountName Everyone -Force -ErrorAction SilentlyContinue
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "BUILTIN\Administrators" -AccessRight Full   -Force
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\SYSTEM"   -AccessRight Full   -Force
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\Authenticated Users" -AccessRight Change -Force
+}
 
-# SMB Share
-New-SmbShare `
-    -Name $ShareName `
-    -Path $FolderPath `
-    -FullAccess "$domain\Administrators","SYSTEM" `
-    -ReadAccess "Authenticated Users" `
-    -Description "Home Share Root" `
-    -ErrorAction Stop
-
-# Remove Everyone
-Remove-SmbShareAccess -Name $ShareName -AccountName "Everyone" -Force -ErrorAction SilentlyContinue
-
-Write-Output "SMB Share '$ShareName' created."
-
-# NTFS Permissions
+# NTFS ACLs (root)
 $root = Get-Item -Path $FolderPath
-$acl = $root.GetAccessControl('Access')
+$acl  = $root.GetAccessControl('Access')
 
-# Disable inheritance
+# Disable inheritance and remove existing explicit ACEs to start clean
 $acl.SetAccessRuleProtection($true, $false)
+foreach ($rule in $acl.Access) { $acl.RemoveAccessRule($rule) | Out-Null }
 
-# Add Administrators + SYSTEM
+# Admins + SYSTEM: Full (inherit to all)
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $admins, "FullControl", $CI -bor $OI, $NoneProp, "Allow"
+    $admins, 'FullControl', $CI -bor $OI, $NoneProp, 'Allow'
+)))
+$acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $system, 'FullControl', $CI -bor $OI, $NoneProp, 'Allow'
 )))
 
+# Authenticated Users: allow creating subfolders at root (THIS FOLDER ONLY)
+$rightsAuth =
+      [System.Security.AccessControl.FileSystemRights]::CreateDirectories `
+    -bor [System.Security.AccessControl.FileSystemRights]::AppendData `
+    -bor [System.Security.AccessControl.FileSystemRights]::ListDirectory `
+    -bor [System.Security.AccessControl.FileSystemRights]::ReadAttributes `
+    -bor [System.Security.AccessControl.FileSystemRights]::ReadExtendedAttributes `
+    -bor [System.Security.AccessControl.FileSystemRights]::Traverse `
+    -bor [System.Security.AccessControl.FileSystemRights]::ReadPermissions
+
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $system, "FullControl", $CI -bor $OI, $NoneProp, "Allow"
+    $auth, $rightsAuth, $NoneInherit, $NoneProp, 'Allow'
 )))
 
-# Authenticated Users – Create Folders Only
-$rightsAuth = [System.Security.AccessControl.FileSystemRights]::CreateDirectories `
-             -bor [System.Security.AccessControl.FileSystemRights]::Traverse `
-             -bor [System.Security.AccessControl.FileSystemRights]::ReadPermissions
-
+# CREATOR OWNER: Full control on subfolders/files only
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $auth, $rightsAuth, $NoneInherit, $NoneProp, "Allow"
+    $creator, 'FullControl', $CI -bor $OI, $InheritOnly, 'Allow'
 )))
 
-# CREATOR OWNER – Full Control (inherit to new folders only)
-$acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $creator, "FullControl", $CI -bor $OI, $InheritOnly, "Allow"
-)))
-
-# Apply NTFS ACLs
 $root.SetAccessControl($acl)
 
-Write-Output "NTFS permissions applied successfully."
-Write-Output "Home folder share root setup completed."
+Write-Output "Home share '$ShareName' created and NTFS permissions applied."
