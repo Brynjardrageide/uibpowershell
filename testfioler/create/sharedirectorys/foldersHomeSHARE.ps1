@@ -1,4 +1,3 @@
-
 <#
 Script: Create-HomeShareRoot.ps1
 Purpose: Create the root folder and share for home directories with correct permissions.
@@ -7,7 +6,8 @@ Run on: The FILE SERVER (as Administrator)
 
 param(
     [string]$FolderPath = 'C:\Shares\HomeShare',
-    [string]$ShareName  = 'HomeShare$'
+    [string]$ShareName  = 'HomeShare$',
+    [switch]$HideFolder
 )
 
 # Accounts
@@ -15,13 +15,6 @@ $admins  = New-Object System.Security.Principal.NTAccount('BUILTIN','Administrat
 $system  = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','SYSTEM')
 $auth    = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','Authenticated Users')
 $creator = New-Object System.Security.Principal.NTAccount('CREATOR OWNER')
-
-# Flags
-$CI = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit
-$OI = [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
-$NoneInherit = [System.Security.AccessControl.InheritanceFlags]::None
-$InheritOnly = [System.Security.AccessControl.PropagationFlags]::InheritOnly
-$NoneProp    = [System.Security.AccessControl.PropagationFlags]::None
 
 # Ensure admin
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -65,10 +58,18 @@ foreach ($rule in $acl.Access) { $acl.RemoveAccessRule($rule) | Out-Null }
 
 # Admins + SYSTEM: Full (inherit to all)
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $admins, 'FullControl', $CI -bor $OI, $NoneProp, 'Allow'
+    $admins,
+    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
 )))
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $system, 'FullControl', $CI -bor $OI, $NoneProp, 'Allow'
+    $system,
+    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
 )))
 
 # Authenticated Users: allow creating subfolders at root (THIS FOLDER ONLY)
@@ -82,12 +83,20 @@ $rightsAuth =
     -bor [System.Security.AccessControl.FileSystemRights]::ReadPermissions
 
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $auth, $rightsAuth, $NoneInherit, $NoneProp, 'Allow'
+    $auth,
+    $rightsAuth,
+    [System.Security.AccessControl.InheritanceFlags]::None,
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
 )))
 
 # CREATOR OWNER: Full control on subfolders/files only
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $creator, 'FullControl', $CI -bor $OI, $InheritOnly, 'Allow'
+    $creator,
+    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+    [System.Security.AccessControl.PropagationFlags]::InheritOnly,
+    [System.Security.AccessControl.AccessControlType]::Allow
 )))
 
 $root.SetAccessControl($acl)
