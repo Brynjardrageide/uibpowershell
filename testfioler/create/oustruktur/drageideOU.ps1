@@ -32,16 +32,16 @@ function EnsureOU {
 
 # Domain DN and OU names
 $domainDN = "DC=drageide,DC=com"
-$rootOUName = "drageideou's"
+$rootOUName = "drageideou"
 $childrenrootOUs = @("computers","groups")
 $usersOUName = "users"
 $childOUs = @("brukere","admins")
 
-# Ensure root OU (OU=drageideou's,DC=drageide,DC=com)
+# Ensure root OU (OU=drageideou,DC=drageide,DC=com)
 $rootDN = EnsureOU -Name $rootOUName -ParentDN $domainDN
 if (-not $rootDN) { exit 1 }
 
-# Ensure users OU under the root (OU=users,OU=drageideou's,DC=drageide,DC=com)
+# Ensure users OU under the root (OU=users,OU=drageideou,DC=drageide,DC=com)
 $usersDN = EnsureOU -Name $usersOUName -ParentDN $rootDN
 if (-not $usersDN) { exit 1 }
 

@@ -31,17 +31,35 @@ $SyncfieldMap = @{
     LastName="Surname"
     phone="telephoneNumber"
     ou="ou"
+    password="password"
 }
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 $userinfo = Get-eployeeFromCsv -filePath "C:\Users\Administrator\Documents\csv\brukere.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 foreach ($user in $userinfo) {
-    if (user.ou -eq "" -or user.ou -eq $null) {
+    # gets variables ready for user creation
+    # checks if the ou field is empty or null and sets it to brukere if it is
+    if ([string]::IsNullOrEmpty($user.ou)) {
         <# Action to perform if the condition is true #>
         $user.ou = "brukere"
     }
+    # sets the ou path based on the ou field in the csv
     $OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
     $Domain = "drageide.com"
     $Email = "$($user.Givenname).$($user.Surname)@$Domain"
+    # first generates a random password then checks if the password field in the csv is empty or null and uses that password instead if it is not
+    $randpassword = [System.Web.Security.Membership]::GeneratePassword(12,2)
+    if (-not [string]::IsNullOrEmpty($user.password)) {
+        $randpassword = $user.password
+    }
+
+    # writes the users name lastname and the generated password to a csv file
+    $output = [PSCustomObject]@{
+        GivenName = $user.GivenName
+        Surname = $user.Surname
+        username = "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))"
+        Password = $randpassword
+    }
+
     New-ADUser `
         -EmployeeID $user.EmployeeID `
         -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
@@ -51,7 +69,7 @@ foreach ($user in $userinfo) {
         -SamAccountName "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))" `
         -Path $OU `
         -EmailAddress $Email `
-        -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) `
+        -AccountPassword (ConvertTo-SecureString "$randpassword" -AsPlainText -Force) `
         -Enabled $true `
         -PasswordNeverExpires $false `
         -ChangePasswordAtLogon $false
