@@ -18,7 +18,7 @@ foreach ($user in $allusers) {
         continue
     }
 
-    $homeFolderPath = "\\$shareServer\$shareName\%username%"
+    $homeFolderPath = "\\$shareServer\$shareName\$username"
 
     # Set only AD attributes; do not create folders
     Set-ADUser -Identity $username -HomeDirectory $homeFolderPath -HomeDrive "H:"
