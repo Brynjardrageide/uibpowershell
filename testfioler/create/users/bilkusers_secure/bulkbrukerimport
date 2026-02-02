@@ -38,7 +38,7 @@ $SyncfieldMap = @{
 $filePathcsv = "C:\Users\Administrator\Documents\csv\brukere.csv"
 $header = "givenName,surname,username,password"
 $filedata = @()
-$filedata += $header
+$filedata += "$header `n"
 
 # ensure target file and parent folder exist
 $dir = Split-Path -Path $filpath -Parent
@@ -104,7 +104,7 @@ foreach ($user in $userinfo) {
         username = "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))"
         Password = $randpassword
     }
-    $filedata += "$($output.GivenName),$($output.Surname),$($output.username),$($output.Password)"
+    $filedata += "$($output.GivenName),$($output.Surname),$($output.username),$($output.Password) `n"
 }
 # writes the collected data to the csv file
 $filedata | Out-File -FilePath $filePathcsv -Encoding UTF8
