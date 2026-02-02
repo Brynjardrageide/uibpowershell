@@ -33,6 +33,33 @@ $SyncfieldMap = @{
     ou="ou"
     password="password"
 }
+
+# dockumenting the password and whom it was created for in a csv file. starting with header
+$filePathcsv = "C:\Users\Administrator\Documents\csv\brukere.csv"
+$header = "givenName,surname,username,password"
+$filedata = @()
+$filedata += $header
+
+# ensure target file and parent folder exist
+$dir = Split-Path -Path $filpath -Parent
+if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path $filpath)) { New-Item -Path $filpath -ItemType File -Force | Out-Null }
+
+try {
+    # remove inherited ACLs
+    icacls $filpath /inheritance:r | Out-Null
+
+    # grant full control to the local Administrator account and to SYSTEM only
+    icacls $filpath /grant:r "Administrator:(F)" "SYSTEM:(F)" | Out-Null
+
+    # remove common built-in groups so only Administrator and SYSTEM keep access
+    icacls $filpath /remove "Users" "Authenticated Users" "Everyone" | Out-Null
+}
+catch {
+    Write-Warning "Failed to set file ACL on $filpath : $_"
+}
+
+
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 $userinfo = Get-eployeeFromCsv -filePath "C:\Users\Administrator\Documents\csv\brukere.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 foreach ($user in $userinfo) {
@@ -48,16 +75,12 @@ foreach ($user in $userinfo) {
     $Email = "$($user.Givenname).$($user.Surname)@$Domain"
     # first generates a random password then checks if the password field in the csv is empty or null and uses that password instead if it is not
     $randpassword = [System.Web.Security.Membership]::GeneratePassword(12,2)
+    $randomnumbers = -join ((48..57) | Get-Random -Count 2 | ForEach-Object {[char]$_})
+    $specials = (33..47) + (58..64) + (91..96) + (123..126)
+    $randomSpecials = -join ($specials | Get-Random -Count 2 | ForEach-Object {[char]$_})
+    $randpassword += $randomnumbers + $randomSpecials
     if (-not [string]::IsNullOrEmpty($user.password)) {
         $randpassword = $user.password
-    }
-
-    # writes the users name lastname and the generated password to a csv file
-    $output = [PSCustomObject]@{
-        GivenName = $user.GivenName
-        Surname = $user.Surname
-        username = "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))"
-        Password = $randpassword
     }
 
     New-ADUser `
@@ -73,4 +96,15 @@ foreach ($user in $userinfo) {
         -Enabled $true `
         -PasswordNeverExpires $false `
         -ChangePasswordAtLogon $false
+
+    # writes the users name lastname and the generated password to a csv file
+    $output = [PSCustomObject]@{
+        GivenName = $user.GivenName
+        Surname = $user.Surname
+        username = "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))"
+        Password = $randpassword
+    }
+    $filedata += "$($output.GivenName),$($output.Surname),$($output.username),$($output.Password)"
 }
+# writes the collected data to the csv file
+$filedata | Out-File -FilePath $filePathcsv -Encoding UTF8
