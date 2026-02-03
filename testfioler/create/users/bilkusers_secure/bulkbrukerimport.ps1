@@ -1,184 +1,114 @@
-<# -----------------------------------------------------------
- Bulk create AD users from CSV and save username/password list
- Author: Brynjar (cleaned & fixed)
------------------------------------------------------------- #>
-
-# Ensure AD cmdlets are loaded
 Import-Module ActiveDirectory
 
-# ----------------- SETTINGS -----------------
-# CSV to read FROM
-$CsvPath      = "C:\Users\Administrator\Documents\csv\brukere.csv"
-$Delimiter    = ","
+# INPUT CSV
+$CsvPath = "C:\Users\Administrator\Documents\csv\brukere.csv"
+$Delimiter = ","
 
-# CSV to write TO (username/password documentation)
-$filePathCsv  = "C:\Users\Administrator\Documents\csv\brukere_created_credentials.csv"
+# OUTPUT CSV
+$OutputCsv = "C:\Users\Administrator\Documents\csv\brukere_output.csv"
 
-# Domain + base OU
-$Domain       = "drageide.com"
-$BaseOU       = "OU=users,OU=drageideou,DC=drageide,DC=com"   # must exist
+# Strong password generator
+function New-StrongPassword {
+    param([int]$Length = 12)
 
-# ----------------- HELPER: safe substring -----------------
-function Get-SafeSubstring {
-    param(
-        [Parameter(Mandatory)][string]$Text,
-        [Parameter(Mandatory)][int]$Length
-    )
-    if ([string]::IsNullOrEmpty($Text)) { return "" }
-    if ($Text.Length -lt $Length) { return $Text } else { return $Text.Substring(0,$Length) }
+    $upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    $lower="abcdefghijklmnopqrstuvwxyz"
+    $digits="0123456789"
+    $special="!@#$%^&*()-_=+[]{}:;,.?"
+
+    $password = ""
+    $password += ($upper | Get-Random -Count 1)
+    $password += ($lower | Get-Random -Count 1)
+    $password += ($digits | Get-Random -Count 1)
+    $password += ($special | Get-Random -Count 1)
+
+    $all = ($upper + $lower + $digits + $special).ToCharArray()
+    $password += -join ($all | Get-Random -Count ($Length - 4))
+
+    return -join ($password.ToCharArray() | Sort-Object {Get-Random})
 }
 
-# ----------------- HELPER: map CSV -> object -----------------
-# csv-filen skal ha kolonnene (eksempel): EmployeeID, FirstName, LastName, phone, ou, password
-function Get-EmployeeFromCsv {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$FilePath,
-        [Parameter(Mandatory)][string]$Delimiter,
-        [Parameter(Mandatory)][hashtable]$SyncfieldMap
-    )
-
-    try {
-        $SyncProperties = $SyncfieldMap.GetEnumerator()
-        $properties = foreach ($property in $SyncProperties) {
-            @{ Name = $property.Value; Expression = [scriptblock]::Create("`$_.$($property.Key)") }
-        }
-        Import-Csv -Path $FilePath -Delimiter $Delimiter | Select-Object -Property $properties
-    }
-    catch {
-        Write-Error "An error occurred while reading CSV: $($_.Exception.Message)"
-        throw
-    }
-}
-
-# Map CSV columns (left side) => Output property names (right side)
+# MAP CSV FIELDS
 $SyncfieldMap = @{
-    EmployeeID = "EmployeeID"        # CSV: EmployeeID
-    FirstName  = "GivenName"         # CSV: FirstName
-    LastName   = "Surname"           # CSV: LastName
-    phone      = "telephoneNumber"   # CSV: phone
-    ou         = "ou"                # CSV: ou (optional)
-    password   = "password"          # CSV: password (optional)
+    EmployeeID="EmployeeID"
+    FirstName="GivenName"
+    LastName="Surname"
+    phone="telephoneNumber"
+    ou="ou"
+    password="password"
 }
 
-# ----------------- READ USERS -----------------
-if (-not (Test-Path -Path $CsvPath)) {
-    throw "CSV file not found: $CsvPath"
+# CSV MAPPING FUNCTION
+function Get-eployeeFromCsv {
+    param ($filePath,$Delimiter,$SyncfieldMap)
+    $SyncProperties=$SyncfieldMap.GetEnumerator()
+    $properties=foreach($property in $SyncProperties){
+        @{Name=$property.Value;Expression=[scriptblock]::Create("`$_.$($property.Key)") }
+    }
+    Import-Csv -Path $filePath -Delimiter $Delimiter | Select-Object -Property $properties
 }
 
-$users = Get-EmployeeFromCsv -FilePath $CsvPath -Delimiter $Delimiter -SyncfieldMap $SyncfieldMap
+# Read CSV
+$Users = Get-eployeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $SyncfieldMap
 
-if (-not $users) {
-    throw "No rows returned from CSV. Check delimiter and column names."
-}
+# Prepare output CSV
+$OutputData = @()
+$OutputData += "GivenName,Surname,Username,Password,Timestamp`n"
 
-# ----------------- PREPARE RESULT LIST -----------------
-$results = New-Object System.Collections.Generic.List[object]
+foreach ($user in $Users) {
 
-# ----------------- CREATE USERS -----------------
-foreach ($user in $users) {
-
-    # Default OU if none supplied
-    if ([string]::IsNullOrEmpty($user.ou)) {
+    # Default OU
+    if ([string]::IsNullOrWhiteSpace($user.ou)) {
         $user.ou = "brukere"
     }
 
-    # Build full OU path and UPN/email
-    $OU     = "OU=$($user.ou),$BaseOU"
-    $upn    = "$($user.GivenName).$($user.Surname)@$Domain"
-    $email  = $upn
+    $OU = "OU=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
+    $Domain = "drageide.com"
 
-    # Generate password if not provided
-    $randPassword = if ([string]::IsNullOrEmpty($user.password)) {
-        # At least 12 chars, include special characters; append extra digits and specials
-        $base = [System.Web.Security.Membership]::GeneratePassword(12,2)
-        $digits = -join ((48..57) | Get-Random -Count 2 | ForEach-Object {[char]$_})
-        $specials = (33..47) + (58..64) + (91..96) + (123..126)
-        $sp = -join ($specials | Get-Random -Count 2 | ForEach-Object {[char]$_})
-        $base + $digits + $sp
-    } else {
-        $user.password
-    }
+    # Username: first 2 + first 3
+    $sam = ($user.GivenName.Substring(0,[Math]::Min(2,$user.GivenName.Length)) +
+            $user.Surname.Substring(0,[Math]::Min(3,$user.Surname.Length)) ).ToLower()
 
-    # Username (sAMAccountName) = 2 first of GivenName + 3 first of Surname (guarded)
-    $sam = (Get-SafeSubstring -Text $user.GivenName -Length 2) + (Get-SafeSubstring -Text $user.Surname -Length 3)
-    $sam = $sam.ToLower()
-
-    # Ensure uniqueness: if exists, append a number
+    # Unique username handling
     $originalSam = $sam
     $i = 1
     while (Get-ADUser -LDAPFilter "(sAMAccountName=$sam)" -ErrorAction SilentlyContinue) {
-        $sam = "{0}{1}" -f $originalSam, $i
+        $sam = "$originalSam$i"
         $i++
     }
 
-    # Build hashtable for optional attributes
-    $otherAttributes = @{}
-    if ($user.telephoneNumber) { $otherAttributes['telephoneNumber'] = $user.telephoneNumber }
-
-    try {
-        New-ADUser `
-            -EmployeeID $user.EmployeeID `
-            -UserPrincipalName $upn `
-            -GivenName $user.GivenName `
-            -Surname $user.Surname `
-            -Name "$($user.GivenName) $($user.Surname)" `
-            -SamAccountName $sam `
-            -Path $OU `
-            -EmailAddress $email `
-            -OtherAttributes $otherAttributes `
-            -AccountPassword (ConvertTo-SecureString $randPassword -AsPlainText -Force) `
-            -Enabled $true `
-            -PasswordNeverExpires $false `
-            -ChangePasswordAtLogon $false
-
-        $results.Add([PSCustomObject]@{
-            GivenName = $user.GivenName
-            Surname   = $user.Surname
-            Username  = $sam
-            UPN       = $upn
-            OU        = $OU
-            Password  = $randPassword
-            Created   = Get-Date
-            Status    = "Created"
-        })
+    # PASSWORD SELECTION
+    if ([string]::IsNullOrWhiteSpace($user.password)) {
+        $Password = New-StrongPassword 12
+    } else {
+        $Password = $user.password
     }
-    catch {
-        $results.Add([PSCustomObject]@{
-            GivenName = $user.GivenName
-            Surname   = $user.Surname
-            Username  = $sam
-            UPN       = $upn
-            OU        = $OU
-            Password  = $randPassword
-            Created   = Get-Date
-            Status    = "FAILED: $($_.Exception.Message)"
-        })
-        Write-Warning "Failed to create user [$($user.GivenName) $($user.Surname)]: $($_.Exception.Message)"
-    }
+
+    # Create user
+    New-ADUser `
+        -EmployeeID $user.EmployeeID `
+        -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
+        -GivenName $user.GivenName `
+        -Surname $user.Surname `
+        -SamAccountName $sam `
+        -Path $OU `
+        -EmailAddress "$($user.GivenName).$($user.Surname)@$Domain" `
+        -AccountPassword (ConvertTo-SecureString $Password -AsPlainText -Force) `
+        -Enabled $true
+
+    # Log output
+    $OutputData += "$($user.GivenName),$($user.Surname),$sam,$Password,$(Get-Date)`n"
 }
 
-# ----------------- WRITE RESULT CSV -----------------
-# Ensure target folder exists
-$dir = Split-Path -Path $filePathCsv -Parent
-if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+# Write output file
+$dir = Split-Path $OutputCsv -Parent
+if (!(Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force }
 
-# Write results (header included automatically)
-$results | Export-Csv -Path $filePathCsv -NoTypeInformation -Encoding UTF8 -Force
+$OutputData | Out-File -FilePath $OutputCsv -Encoding UTF8 -Force
 
-# ----------------- LOCK DOWN RESULT FILE PERMISSIONS -----------------
-try {
-    # Remove inheritance
-    icacls "$filePathCsv" /inheritance:r | Out-Null
+# Secure output file
+icacls $OutputCsv /inheritance:r | Out-Null
+icacls $OutputCsv /grant:r "*S-1-5-32-544:(F)" "SYSTEM:(F)" | Out-Null
+icacls $OutputCsv /remove "Users" "Authenticated Users" "Everyone" | Out-Null
 
-    # Grant full control ONLY to local Administrator and SYSTEM
-    icacls "$filePathCsv" /grant:r "Administrator:(F)" "SYSTEM:(F)" | Out-Null
-
-    # Remove broad groups if present
-    icacls "$filePathCsv" /remove "Users" "Authenticated Users" "Everyone" | Out-Null
-}
-catch {
-    Write-Warning "Failed to set file ACL on $filePathCsv : $($_.Exception.Message)"
-}
-
-Write-Host "`nDone. Results saved to: $filePathCsv" -ForegroundColor Green
+Write-Host "Done! Output saved to $OutputCsv" -ForegroundColor Green
