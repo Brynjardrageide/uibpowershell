@@ -79,7 +79,7 @@ foreach ($user in $Users) {
 
     # PASSWORD SELECTION
     if ([string]::IsNullOrWhiteSpace($user.password)) {
-        $Password = New-StrongPassword 12
+        $Password = New-StrongPassword 
     } else {
         $Password = $user.password
     }
