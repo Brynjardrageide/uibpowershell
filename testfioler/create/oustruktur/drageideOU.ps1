@@ -35,7 +35,7 @@ $domainDN = "DC=drageide,DC=com"
 $rootOUName = "drageideou"
 $childrenrootOUs = @("computers","groups")
 $usersOUName = "users"
-$childOUs = @("brukere","admins")
+$childOUs = @("brukere","it")
 
 # Ensure root OU (OU=drageideou,DC=drageide,DC=com)
 $rootDN = EnsureOU -Name $rootOUName -ParentDN $domainDN
