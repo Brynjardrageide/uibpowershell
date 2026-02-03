@@ -87,6 +87,7 @@ foreach ($user in $Users) {
     # Create user
     New-ADUser `
         -EmployeeID $user.EmployeeID `
+        -Name "$($user.GivenName) $($user.Surname)" `
         -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
         -GivenName $user.GivenName `
         -Surname $user.Surname `
