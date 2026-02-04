@@ -6,25 +6,35 @@ function EnsureOU {
         [Parameter(Mandatory=$true)][string]$ParentDN
     )
 
-    if (-not $ParentDN) {
-        Write-Error "ParentDN is required for EnsureOU."
-        return $null
-    }
+    # Exact match search using LDAP filter (more reliable)
+    $ldapFilter = "(ou=$Name)"
 
-    # Find existing child OU by name under the provided parent DN
-    $existing = Get-ADOrganizationalUnit -SearchBase $ParentDN -Filter * -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -eq $Name }
+    $existing = Get-ADOrganizationalUnit `
+        -LDAPFilter $ldapFilter `
+        -SearchBase $ParentDN `
+        -ErrorAction SilentlyContinue
 
+    start-sleep -seconds 0.5
     if ($existing) {
         Write-Host "OU already exists: $($existing.DistinguishedName)"
         return $existing.DistinguishedName
     }
 
     try {
-        $newOU = New-ADOrganizationalUnit -Name $Name -Path $ParentDN -ProtectedFromAccidentalDeletion $false -ErrorAction Stop
+        $newOU = New-ADOrganizationalUnit `
+            -Name $Name `
+            -Path $ParentDN `
+            -ProtectedFromAccidentalDeletion $false `
+            -ErrorAction Stop
+
         Write-Host "Created OU: $($newOU.DistinguishedName)"
+
+        # Fix: wait for AD replication to settle
+        Start-Sleep -Seconds 1
+
         return $newOU.DistinguishedName
-    } catch {
+    }
+    catch {
         Write-Error "Failed to create OU '$Name' under '$ParentDN': $_"
         return $null
     }

@@ -1,24 +1,70 @@
+# Install DHCP role
 Install-WindowsFeature -Name DHCP -IncludeManagementTools
-Import-Module DHCPServer
+Import-Module DhcpServer
 
-# Configure a static IP address for the DHCP server
-$eth2ip = Read-Host "read the ip adress you want to set for the dhcp server"
-scopeGateway = Read-Host "Enter the default gateway for the DHCP scope and dhcp server (e.g.,"
-$scopeDnsServers = Read-Host "Enter the DNS server IP addresses for the DHCP scope and dhcp server, separated by commas (e.g.,"
+# ipv6
+# Disable IPv6 on ALL network adapters
+Get-NetAdapterBinding -ComponentID ms_tcpip6 | Disable-NetAdapterBinding -ComponentID ms_tcpip6 -Confirm:$false
 
-Set-NetIPInterface -InterfaceAlias "Ethernet 2" -Dhcp Disabled
-New-NetIPAddress -InterfaceAlias "Ethernet 2" -IPAddress $eth2ip -PrefixLength 24 -DefaultGateway "192.168.1.1"
-Set-DnsClientServerAddress -InterfaceAlias "Ethernet 2" -ServerAddresses ("127.0.0.1",$scopeDnsServers.Split(","))
+# --- INPUTS ---
+$nicAlias = "Ethernet 2"   # Fixed NIC for DHCP server
 
+$serverIP = Read-Host "Enter the IP address you want to assign to Ethernet 2 (e.g., 192.168.5.10)"
+$prefixLength = Read-Host "Enter prefix length (24 = 255.255.255.0)"
+$scopeStartIp = Read-Host "Enter DHCP scope START IP (e.g., 192.168.5.50)"
+$scopeEndIp = Read-Host "Enter DHCP scope END IP (e.g., 192.168.5.200)"
+$scopeGateway = Read-Host "Enter Default Gateway for the scope (e.g., 192.168.5.1)"
+$scopeDns = Read-Host "Enter DNS servers (comma separated)"
+$scopeName = Read-Host "Enter Scope name (e.g., Office 192.168.5.x)"
 
-# Authorize the DHCP server in Active Directory
-$dhcpServerIp = (Get-NetIPAddress -InterfaceAlias "Ethernet" | Where-Object {$_.AddressFamily -eq "IPv4"}).IPAddress
-Add-DhcpServerInDC -DnsName $dhcpServerIp -IpAddress $dhcpServerIp
-# Configure a DHCP scope
-$scopeName = "Office Network"
-$scopeStartIp = Read-Host "Enter the start IP address for the DHCP scope (e.g.,"
-$scopeEndIp = Read-Host "Enter the end IP address for the DHCP scope (e.g.,"
-Add-DhcpServerv4Scope -Name $scopeName -StartRange $scopeStartIp -EndRange $scopeEndIp -SubnetMask $scopeSubnetMask -State Active
-Set-DhcpServerv4OptionValue -ScopeId $scopeStartIp -Router $scopeGateway -DnsServer $scopeDnsServers
-Write-Host "DHCP server configured successfully."
-# End of script
+# Convert prefix to subnet mask (matches Microsoft examples)
+function Convert-PrefixToMask {
+    param([int]$Prefix)
+
+    $mask = [uint32]0
+    if ($Prefix -gt 0) {
+        $mask = 0xffffffff -shl (32 - $Prefix)
+    }
+
+    return [System.Net.IPAddress]$mask
+}
+
+# Calculate network ID from IP + mask
+function Get-NetworkID {
+    param([string]$Ip, [string]$Mask)
+
+    $ipBytes = [System.Net.IPAddress]::Parse($Ip).GetAddressBytes()
+    $maskBytes = [System.Net.IPAddress]::Parse($Mask).GetAddressBytes()
+
+    $netBytes = for ($i=0; $i -lt 4; $i++) { $ipBytes[$i] -band $maskBytes[$i] }
+    return ($netBytes -join '.')
+}
+
+# Generate subnet mask from prefix
+$subnetMask = Convert-PrefixToMask -Prefix $prefixLength
+$scopeId = Get-NetworkID -Ip $serverIP -Mask $subnetMask
+
+Write-Host "Calculated ScopeId (Network ID): $scopeId"
+Write-Host "Subnet Mask: $subnetMask"
+
+# --- CONFIGURE STATIC IP ---
+Set-NetIPInterface -InterfaceAlias $nicAlias -Dhcp Disabled
+
+# Remove any old IPv4 before adding new
+Get-NetIPAddress -InterfaceAlias $nicAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+
+# Assign static IP
+New-NetIPAddress -InterfaceAlias $nicAlias -IPAddress $serverIP -PrefixLength $prefixLength -DefaultGateway $scopeGateway
+
+# Configure DNS on NIC
+Set-DnsClientServerAddress -InterfaceAlias $nicAlias -ServerAddresses ($scopeDns.Split(","))
+
+# --- DHCP SCOPE CREATION ---
+Add-DhcpServerv4Scope -Name $scopeName -StartRange $scopeStartIp -EndRange $scopeEndIp -SubnetMask $subnetMask -State Active
+
+# DHCP Options
+Set-DhcpServerv4OptionValue -ScopeId $scopeId -Router $scopeGateway
+Set-DhcpServerv4OptionValue -ScopeId $scopeId -DnsServer ($scopeDns.Split(","))
+
+Write-Host "DHCP server installed and scope created successfully!"
