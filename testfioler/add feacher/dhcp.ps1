@@ -19,7 +19,7 @@ $scopeName    = "test"# Read-Host "Enter scope name"
 
 
 # --- CONFIGURE STATIC IP ---
-Get-NetIPAddress -InterfaceAlias "Ethernet 2" | Remove-NetIPAddress -Confirm:$false
+Get-NetIPAddress -InterfaceAlias $nicAlias | Remove-NetIPAddress -Confirm:$false
 New-NetIPAddress -InterfaceAlias $nicAlias `
     -IPAddress $serverIP `
     -PrefixLength $prefixLength `
