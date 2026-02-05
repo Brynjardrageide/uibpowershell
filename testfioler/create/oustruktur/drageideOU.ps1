@@ -1,10 +1,21 @@
 Import-Module ActiveDirectory -ErrorAction Stop
 
 function EnsureOU {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)][string]$Name,
         [Parameter(Mandatory=$true)][string]$ParentDN
     )
+
+    # Verify parent DN exists before doing any AD queries/creates
+    try {
+        $parentObj = Get-ADObject -Identity $ParentDN -ErrorAction Stop
+        Write-Verbose "Parent found: $($parentObj.DistinguishedName)"
+    }
+    catch {
+        Write-Error "Parent DN not found or not reachable: $ParentDN. Cannot create OU '$Name'."
+        return $null
+    }
 
     # Exact match search using LDAP filter (more reliable)
     $ldapFilter = "(ou=$Name)"
@@ -27,12 +38,23 @@ function EnsureOU {
             -ProtectedFromAccidentalDeletion $false `
             -ErrorAction Stop
 
-        Write-Host "Created OU: $($newOU.DistinguishedName)"
+        # Wait and verify the OU exists using the created object's DN (retries to account for AD latency)
+        $found = $null
+        $newDN = $newOU.DistinguishedName
+        for ($i = 0; $i -lt 5; $i++) {
+            Start-Sleep -Seconds 1
+            $found = Get-ADOrganizationalUnit -Identity $newDN -ErrorAction SilentlyContinue
+            if ($found) { break }
+        }
 
-        # Fix: wait for AD replication to settle
-        Start-Sleep -Seconds 1
-
-        return $newOU.DistinguishedName
+        if ($found) {
+            Write-Host "Created OU: $($found.DistinguishedName)"
+            return $found.DistinguishedName
+        }
+        else {
+            Write-Error "OU '$Name' was created but could not be verified at DN '$newDN'."
+            return $null
+        }
     }
     catch {
         Write-Error "Failed to create OU '$Name' under '$ParentDN': $_"
