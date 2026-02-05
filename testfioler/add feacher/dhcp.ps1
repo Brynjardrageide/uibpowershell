@@ -6,6 +6,24 @@ Import-Module DhcpServer
 # Disable IPv6 on ALL network adapters
 Get-NetAdapterBinding -ComponentID ms_tcpip6 | Disable-NetAdapterBinding -ComponentID ms_tcpip6 -Confirm:$false
 
+# === Replicate DHCP Post-Install Wizard ===
+
+# Create DHCP security groups (DHCP Administrators, DHCP Users)
+Add-DhcpServerSecurityGroup
+
+# Get server FQDN and IP for authorization
+$hostname = (Get-CimInstance Win32_ComputerSystem).DNSHostName
+$domain   = (Get-CimInstance Win32_ComputerSystem).Domain
+$fqdn     = "$hostname.$domain"
+
+$serverIP = (Get-NetIPAddress -InterfaceAlias "Ethernet 2" |
+             Where-Object {$_.AddressFamily -eq "IPv4"}).IPAddress
+
+# Authorize DHCP server in Active Directory (same as GUI wizard)
+Add-DhcpServerInDC -DnsName $fqdn -IpAddress $serverIP
+
+
+
 # --- INPUTS ---
 $nicAlias = "Ethernet 2"   # Fixed NIC for DHCP server
 
@@ -19,14 +37,24 @@ $scopeName = Read-Host "Enter Scope name (e.g., Office 192.168.5.x)"
 
 # Convert prefix to subnet mask (matches Microsoft examples)
 function Convert-PrefixToMask {
-    param([int]$Prefix)
+    param([Parameter(Mandatory)][int]$Prefix)
 
-    $mask = [uint32]0
-    if ($Prefix -gt 0) {
-        $mask = 0xffffffff -shl (32 - $Prefix)
+    if ($Prefix -lt 0 -or $Prefix -gt 32) {
+        throw "Prefix length must be between 0 and 32."
     }
 
-    return [System.Net.IPAddress]$mask
+    # Build a 32-bit mask with $Prefix leading 1s (network order)
+    $mask = 0
+    if ($Prefix -gt 0) {
+        $mask = [uint32]0xFFFFFFFF -shl (32 - $Prefix)
+    }
+
+    # Convert to dotted decimal in network byte order
+    $b0 = ($mask -shr 24) -band 0xFF
+    $b1 = ($mask -shr 16) -band 0xFF
+    $b2 = ($mask -shr 8)  -band 0xFF
+    $b3 =  $mask          -band 0xFF
+    return "$b0.$b1.$b2.$b3"
 }
 
 # Calculate network ID from IP + mask
@@ -41,7 +69,10 @@ function Get-NetworkID {
 }
 
 # Generate subnet mask from prefix
-$subnetMask = Convert-PrefixToMask -Prefix $prefixLength
+$subnetMask = "255.255.255.0" # default for /24
+if ($prefixLength -ne 24) {
+    $subnetMask = Convert-PrefixToMask -Prefix $prefixLength
+}
 $scopeId = Get-NetworkID -Ip $serverIP -Mask $subnetMask
 
 Write-Host "Calculated ScopeId (Network ID): $scopeId"
@@ -67,4 +98,6 @@ Add-DhcpServerv4Scope -Name $scopeName -StartRange $scopeStartIp -EndRange $scop
 Set-DhcpServerv4OptionValue -ScopeId $scopeId -Router $scopeGateway
 Set-DhcpServerv4OptionValue -ScopeId $scopeId -DnsServer ($scopeDns.Split(","))
 
-Write-Host "DHCP server installed and scope created successfully!"
+Write-Host "DHCP server installed and scope created successfully! going to restart later"
+
+shutdown -r -t 900 -c "Restarting in 15 minutes to finalize DHCP installation." -f
