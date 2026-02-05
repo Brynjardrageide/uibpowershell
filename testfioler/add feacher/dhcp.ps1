@@ -22,7 +22,7 @@ $scopeName    = "test"# Read-Host "Enter scope name"
 Get-NetIPAddress -InterfaceAlias $nicAlias | Remove-NetIPAddress -Confirm:$false
 New-NetIPAddress -InterfaceAlias $nicAlias `
     -IPAddress $serverIP `
-    -PrefixLength 24 `
+    -PrefixLength $prefixLength `
     -DefaultGateway $gateway
 set-dnsclientserveraddress -interfacealias $nicAlias `
     -serveraddresses $dnsList,"8.8.8.8"
