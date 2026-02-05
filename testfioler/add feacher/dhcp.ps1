@@ -17,6 +17,17 @@ $gateway      = "192.168.5.1"# Read-Host "Enter default gateway"
 $dnsList      = "192.168.1.30"# Read-Host "Enter DNS servers (comma separated)"
 $scopeName    = "test"# Read-Host "Enter scope name"
 
+
+# --- CONFIGURE STATIC IP ---
+Get-NetIPAddress -InterfaceAlias "Ethernet 2" | Remove-NetIPAddress -Confirm:$false
+New-NetIPAddress -InterfaceAlias $nicAlias `
+    -IPAddress $serverIP `
+    -PrefixLength 24 `
+    -DefaultGateway $gateway
+set-dnsclientserveraddress -interfacealias $nicAlias `
+    -serveraddresses $dnsList,"8.8.8.8"
+
+
 # Convert prefix to subnet mask (simple + bulletproof)
 $mask = "255.255.255.0"
 $mask
