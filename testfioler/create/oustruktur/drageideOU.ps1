@@ -8,13 +8,24 @@ function EnsureOU {
     )
 
     # Verify parent DN exists before doing any AD queries/creates
-    try {
-        $parentObj = Get-ADObject -Identity $ParentDN -ErrorAction Stop
-        Write-Verbose "Parent found: $($parentObj.DistinguishedName)"
+    # Retry a few times because the parent may have just been created earlier in this script
+    $parentObj = $null
+    for ($p = 0; $p -lt 6; $p++) {
+        try {
+            $parentObj = Get-ADObject -Identity $ParentDN -ErrorAction Stop
+            break
+        }
+        catch {
+            Start-Sleep -Seconds 1
+        }
     }
-    catch {
-        Write-Error "Parent DN not found or not reachable: $ParentDN. Cannot create OU '$Name'."
+
+    if (-not $parentObj) {
+        Write-Error "Parent DN not found or not reachable after retries: $ParentDN. Cannot create OU '$Name'."
         return $null
+    }
+    else {
+        Write-Verbose "Parent found: $($parentObj.DistinguishedName)"
     }
 
     # Exact match search using LDAP filter (more reliable)
