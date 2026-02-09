@@ -33,9 +33,8 @@ $SyncfieldMap = @{
     EmployeeID="EmployeeID"
     FirstName="GivenName"
     LastName="Surname"
-    phone="telephoneNumber"
     ou="ou"
-    password="password"
+    passord="password"
 }
 
 # CSV MAPPING FUNCTION
