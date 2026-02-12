@@ -79,6 +79,7 @@ $rootOUName = "drageideou"
 $childrenrootOUs = @("computers","groups")
 $usersOUName = "users"
 $childOUs = @("brukere","it")
+$computerchildOUs = @("klienter","servere")
 
 # Ensure root OU (OU=drageideou,DC=drageide,DC=com)
 $rootDN = EnsureOU -Name $rootOUName -ParentDN $domainDN
@@ -96,6 +97,10 @@ foreach ($child in $childrenrootOUs) {
 # Ensure the requested child OUs under OU=users,...
 foreach ($child in $childOUs) {
     EnsureOU -Name $child -ParentDN $usersDN | Out-Null
+}
+
+foreach ($child in $computerchildOUs) {
+    EnsureOU -Name $child -ParentDN "ou=computers,$rootDN" | Out-Null
 }
  
 Write-Host "OU creation complete."
