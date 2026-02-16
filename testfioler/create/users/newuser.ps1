@@ -6,12 +6,12 @@ $user = @{
     Surname = Read-Host "Enter Surname"
     ou = Read-Host "Enter OU (leave blank for default 'brukere')"
 }
-    if (user.ou -eq "" -or user.ou -eq $null) {
-        <# Action to perform if the condition is true #>
-        $user.ou = "brukere"
-    }
+if ($user.ou -eq "" -or $user.ou -eq $null) {
+    <# Action to perform if the condition is true #>
+    $user.ou = "brukere"
+}
 
-$OU = "ou=$($OU),OU=users,OU=drageideou,DC=drageide,DC=com"
+$OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
 $Domain = "drageide.com"
 $Email = "$($user.Givenname).$($user.Surname)@$Domain"
 New-ADUser `
