@@ -15,7 +15,8 @@ Usage examples:
 Note: run this on the WSUS server (or against a remote WSUS server with WinRM/permissions). Some configuration changes require administrative privileges.
 See: https://learn.microsoft.com/powershell/module/updateservices
 #>
-
+Install-WindowsFeature -name windows-server-update-services -IncludeManagementTools
+Install-WindowsFeature -name UpdateServices
 param(
     [string]$ServerName = $env:COMPUTERNAME,
     [int]$Port = 8530,
@@ -23,145 +24,165 @@ param(
     [switch]$WhatIf
 )
 
-Set-StrictMode -Version Latest
+# ---------------------------
+#  Functions
+# ---------------------------
+function Info ($msg) { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
+function Warn ($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
+function Err ($msg)  { Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
-function Write-Info { param($m) Write-Host "[INFO] $m" -ForegroundColor Cyan }
-function Write-Warn { param($m) Write-Host "[WARN] $m" -ForegroundColor Yellow }
-function Write-Err  { param($m) Write-Host "[ERROR] $m" -ForegroundColor Red }
-
-Write-Info "Loading UpdateServices module..."
-if (-not (Get-Module -ListAvailable -Name UpdateServices)) {
-    try {
-        Import-Module UpdateServices -ErrorAction Stop
-    } catch {
-        Write-Err "UpdateServices module not found or could not be imported. Ensure WSUS management tools are installed. $_"
-        exit 1
-    }
-} else {
-    Import-Module UpdateServices -ErrorAction SilentlyContinue
+# ---------------------------
+#  Load WSUS module
+# ---------------------------
+Info "Loading UpdateServices module..."
+try {
+    Import-Module UpdateServices -ErrorAction Stop
+}
+catch {
+    Err "UpdateServices module not available. Make sure WSUS role + management tools are installed."
+    exit 1
 }
 
+# ---------------------------
+#  Connect to WSUS server
+# ---------------------------
+Info "Connecting to WSUS server: $ServerName (Port $Port, SSL: $UseSsl)..."
+
 try {
-    Write-Info "Getting WSUS server object for '$ServerName' (port $Port, UseSsl=$UseSsl)..."
-    if ($ServerName -and ($ServerName -ne $env:COMPUTERNAME)) {
-        $wsus = Get-WsusServer -Name $ServerName -PortNumber $Port -UseSsl:$UseSsl
-    } else {
-        $wsus = Get-WsusServer -PortNumber $Port -UseSsl:$UseSsl
-    }
-} catch {
-    Write-Err "Failed to get WSUS server object: $_"
+    $wsus = Get-WsusServer -Name $ServerName -PortNumber $Port -UseSsl:$UseSsl
+}
+catch {
+    Err "Failed to connect to WSUS server: $_"
     exit 2
 }
 
-Write-Info "Configuring upstream synchronization: Microsoft Update (SyncFromMU)..."
+# ---------------------------
+#  Configure Sync Source
+# ---------------------------
+Info "Configuring synchronization source: Microsoft Update..."
+
 if ($WhatIf) {
-    Write-Info "WhatIf: would run Set-WsusServerSynchronization -UpdateServer <wsus> -SyncFromMU"
-} else {
+    Info "WhatIf: Would run Set-WsusServerSynchronization -SyncFromMU"
+}
+else {
     try {
         Set-WsusServerSynchronization -UpdateServer $wsus -SyncFromMU -ErrorAction Stop
-        Write-Info "WSUS configured to synchronize from Microsoft Update."
-    } catch {
-        Write-Err "Failed to set synchronization to Microsoft Update: $_"
+        Info "Synchronization set to Microsoft Update."
+    }
+    catch {
+        Err "Failed to configure upstream source: $_"
     }
 }
 
-# Try to remove an automatic synchronization schedule so syncs are manual
-Write-Info "Ensuring synchronization is manual (no scheduled automatic sync)..."
+# ---------------------------
+#  Manual Sync (Remove schedule)
+# ---------------------------
+Info "Setting synchronization schedule to MANUAL..."
+
 try {
     $subscription = $wsus.GetSubscription()
-    if ($subscription -ne $null) {
-        # Inspect for a schedule property and attempt to clear it. Exact API names differ between versions
-        $props = ($subscription | Get-Member -MemberType *Property | Select-Object -ExpandProperty Name)
-        if ($props -contains 'SynchronizationSchedule') {
-            if ($WhatIf) {
-                Write-Info "WhatIf: would clear SynchronizationSchedule on subscription (make manual)."
-            } else {
-                $subscription.SynchronizationSchedule = $null
-                $subscription.Save()
-                Write-Info "Cleared SynchronizationSchedule (synchronization set to manual)."
-            }
-        } else {
-            Write-Warn "Could not find a 'SynchronizationSchedule' property on the subscription object. If the schedule remains, remove it in the WSUS console (Options -> Synchronization) to make syncs manual."
+
+    # Many WSUS versions use this property
+    if ($subscription -and $subscription.SynchronizeAutomatically -ne $null) {
+        if ($WhatIf) {
+            Info "WhatIf: Would disable automatic sync schedule."
         }
-    } else {
-        Write-Warn "Subscription object is null; could not modify schedule."
+        else {
+            $subscription.SynchronizeAutomatically = $false
+            $subscription.Save()
+            Info "Automatic synchronizations disabled (manual mode)."
+        }
     }
-} catch {
-    Write-Warn "Could not modify synchronization schedule via the API: $_. You can set manual sync from the WSUS console (Options -> Synchronization)."
+    else {
+        Warn "Automatic sync property not found. Use WSUS console if needed."
+    }
+}
+catch {
+    Warn "Could not modify sync schedule: $_"
 }
 
-# Enable products (Windows 10 and Windows 11)
-Write-Info "Enabling product categories: Windows 10 and Windows 11 (matched by title)..."
+# ---------------------------
+#  Enable Product Categories
+# ---------------------------
+Info "Enabling products: Windows 10, Windows 11, Dynamic Updates..."
+
 try {
-    $products = Get-WsusProduct -UpdateServer $wsus | Where-Object { $_.product.title -match 'Windows 10|Windows 11' }
-    if ($products -and $products.Count -gt 0) {
+    $products = Get-WsusProduct -UpdateServer $wsus |
+        Where-Object {
+            $_.Product.Title -match 'Windows 10' -or
+            $_.Product.Title -match 'Windows 11' -or
+            $_.Product.Title -match 'Dynamic Update'
+        }
+
+    if ($products.Count -gt 0) {
         if ($WhatIf) {
-            $products | ForEach-Object { Write-Info "WhatIf: would enable product: $($_.product.title)" }
-        } else {
+            $products | ForEach-Object { Info "WhatIf: Would enable product $($_.Product.Title)" }
+        }
+        else {
             $products | Set-WsusProduct
-            Write-Info "Enabled products: $((($products | ForEach-Object { $_.product.title }) -join ', '))"
+            Info "Enabled products: $($products.Product.Title -join ', ')"
         }
-    } else {
-        Write-Warn "No products matched 'Windows 10' or 'Windows 11'. Run Get-WsusProduct to list available titles."
     }
-} catch {
-    Write-Err "Failed to enable products: $_"
+    else {
+        Warn "No matching products found. Run Get-WsusProduct manually to inspect available ones."
+    }
+}
+catch {
+    Err "Error enabling products: $_"
 }
 
-# Enable classifications: Critical Updates and Definition Updates
-Write-Info "Enabling classifications: Critical Updates and Definition Updates..."
+# ---------------------------
+#  Enable Update Classifications
+# ---------------------------
+Info "Enabling classifications: Critical, Security, Definition Updates..."
+
+$desired = @(
+    "Critical Updates",
+    "Definition Updates",
+    "Security Updates"
+)
+
 try {
-    $wanted = @('Critical Updates','Definition Updates','security updates')
-    $classes = Get-WsusClassification -UpdateServer $wsus | Where-Object { $wanted -contains $_.Classification.Title }
-    if ($classes -and $classes.Count -gt 0) {
+    $class = Get-WsusClassification -UpdateServer $wsus |
+        Where-Object { $desired -contains $_.Classification.Title }
+
+    if ($class.Count -gt 0) {
         if ($WhatIf) {
-            $classes | ForEach-Object { Write-Info "WhatIf: would enable classification: $($_.Classification.Title)" }
-        } else {
-            $classes | Set-WsusClassification
-            Write-Info "Enabled classifications: $((($classes | ForEach-Object { $_.Classification.Title }) -join ', '))"
+            $class | ForEach-Object { Info "WhatIf: Would enable classification $($_.Classification.Title)" }
         }
-    } else {
-        Write-Warn "Could not find the requested classifications. Run Get-WsusClassification to see available values."
+        else {
+            $class | Set-WsusClassification
+            Info "Enabled: $($class.Classification.Title -join ', ')"
+        }
     }
-} catch {
-    Write-Err "Failed to enable classifications: $_"
+    else {
+        Warn "No matching classifications found."
+    }
+}
+catch {
+    Err "Could not set classifications: $_"
 }
 
-# Attempt to disable storing update files locally
-Write-Info "Attempting to disable storing update files locally on this WSUS server (if supported by the API)..."
+# ---------------------------
+#  Disable Local Update Storage
+# ---------------------------
+Info "Disabling 'store updates locally' (download-from-Microsoft mode)..."
+
 try {
     $config = $wsus.GetConfiguration()
-    if ($config -ne $null) {
-        $configProps = ($config | Get-Member -MemberType *Property | Select-Object -ExpandProperty Name)
-        $candidates = @('UpdateFilesStoredLocally','StoreUpdatesLocally','StoreUpdateFilesLocally','ContentLocalPublishingEnabled')
-        $found = $configProps | Where-Object { $candidates -contains $_ }
-        if ($found -and $found.Count -gt 0) {
-            foreach ($p in $found) {
-                if ($WhatIf) {
-                    Write-Info "WhatIf: would set configuration property '$p' = $false"
-                } else {
-                    try {
-                        $config.$p = $false
-                        Write-Info "Set $p = false"
-                    } catch {
-                        Write-Warn "Could not set property '$p': $_"
-                    }
-                }
-            }
-            if (-not $WhatIf) {
-                try { $config.Save(); Write-Info "Saved WSUS configuration changes." } catch { Write-Warn "Failed saving configuration: $_" }
-            }
-        } else {
-            Write-Warn "No direct configuration property found to disable local update file storage. Please disable 'Store update files locally on this server' in the WSUS console under Options -> Update Files and Languages."
+    if ($config) {
+        if ($WhatIf) {
+            Info "WhatIf: Would set StoreUpdateFilesLocally = $false"
         }
-    } else {
-        Write-Warn "Unable to retrieve WSUS configuration object."
+        else {
+            $config.StoreUpdateFilesLocally = $false
+            $config.Save()
+            Info "Local storage disabled. WSUS will not download updates."
+        }
     }
-} catch {
-    Write-Warn "Error while attempting to change WSUS configuration: $_"
+}
+catch {
+    Warn "Failed to disable local file storage: $_"
 }
 
-Write-Info "Configuration script finished."
-Write-Info "If you want to run an immediate manual sync, run: Start-WsusSynchronization -UpdateServer (Get-WsusServer -Name '$ServerName' -PortNumber $Port -UseSsl:$UseSsl)"
-
-# End of script
+Info "WSUS configuration completed!"
