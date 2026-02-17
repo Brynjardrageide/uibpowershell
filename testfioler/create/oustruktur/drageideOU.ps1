@@ -100,7 +100,7 @@ foreach ($child in $childOUs) {
 }
 
 foreach ($child in $computerchildOUs) {
-    EnsureOU -Name $child -ParentDN "ou=computers,$rootDN" | Out-Null
+    EnsureOU -Name $child -ParentDN "OU=computers,$rootDN" | Out-Null
 }
  
 Write-Host "OU creation complete."
