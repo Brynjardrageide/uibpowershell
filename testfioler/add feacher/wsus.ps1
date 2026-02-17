@@ -23,7 +23,7 @@ param(
     [switch]$UseSsl,
     [switch]$WhatIf
 )
-
+$ServerName
 # ---------------------------
 #  Functions
 # ---------------------------
