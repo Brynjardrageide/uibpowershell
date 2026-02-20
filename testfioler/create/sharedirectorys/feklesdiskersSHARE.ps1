@@ -114,6 +114,20 @@ $root.SetAccessControl($acl)
 
 Write-Output "Home share '$ShareName' created and NTFS permissions applied."
 
+
+# this is for groups spesific permissions on department subfolders, e.g. ITTeam gets FullControl on IT folder, etc.
+# reuseble variables for rights and inheritance flags
+$rights =
+    [System.Security.AccessControl.FileSystemRights]::Read `
+    -bor [System.Security.Security.AccessControl.FileSystemRights]::ReadPermissions `
+    -bor [System.Security.AccessControl.FileSystemRights]::WriteAttributes `
+    -bor [System.Security.AccessControl.FileSystemRights]::Delete
+
+# dette er for denne mappen og alle undermapper og filer
+$inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit `
+         -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+
+
 for ($i = 0; $i -lt $children.Count; $i++) {
     $childPath = Join-Path $FolderPath $children[$i]
     New-Item -Path $childPath -ItemType Directory -Force | Out-Null
@@ -123,7 +137,8 @@ $rootitem = Get-Item $"FolderPath\$($children[0])"
 $acl  = $rootitem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $itTeam,
-    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    $rights,
+    $inherit,
     ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
@@ -133,7 +148,8 @@ $rootitem = Get-Item $"FolderPath\$($children[1])"
 $acl  = $rootitem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $salesTeam,
-    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    $rights,
+    $inherit,    
     ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
@@ -143,7 +159,8 @@ $rootitem = Get-Item $"FolderPath\$($children[2])"
 $acl  = $rootitem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $admteam,
-    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    $rights,
+    $inherit,
     ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
