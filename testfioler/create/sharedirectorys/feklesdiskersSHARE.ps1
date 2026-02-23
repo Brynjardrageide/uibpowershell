@@ -117,53 +117,62 @@ Write-Output "Home share '$ShareName' created and NTFS permissions applied."
 
 # this is for groups spesific permissions on department subfolders, e.g. ITTeam gets FullControl on IT folder, etc.
 # reuseble variables for rights and inheritance flags
+# Reusable variables for department rights and inheritance flags
 $rights =
     [System.Security.AccessControl.FileSystemRights]::Read `
-    -bor [System.Security.Security.AccessControl.FileSystemRights]::ReadPermissions `
+    -bor [System.Security.AccessControl.FileSystemRights]::ReadPermissions `
     -bor [System.Security.AccessControl.FileSystemRights]::WriteAttributes `
     -bor [System.Security.AccessControl.FileSystemRights]::Delete
 
-# dette er for denne mappen og alle undermapper og filer
+# Apply to subfolders and files
 $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit `
          -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
 
-# makes all the department subfolders and applies permissions for the respective groups
+# Create all department subfolders
 for ($i = 0; $i -lt $children.Count; $i++) {
     $childPath = Join-Path $FolderPath $children[$i]
-    New-Item -Path $childPath -ItemType Directory -Force | Out-Null
-    Write-Output "Created child folder: $childPath"
+    if (-not (Test-Path $childPath)) {
+        New-Item -Path $childPath -ItemType Directory -Force | Out-Null
+        Write-Output "Created child folder: $childPath"
+    } else {
+        Write-Output "Child folder already exists: $childPath"
+    }
 }
-$rootitem = Get-Item $"FolderPath\$($children[0])"
-$acl  = $rootitem.GetAccessControl('Access')
+
+# IT
+$childItem = Get-Item "$FolderPath\$($children[0])"
+$acl = $childItem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $itTeam,
-    $rights,
-    $inherit,
-    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
-    [System.Security.AccessControl.PropagationFlags]::None,
-    [System.Security.AccessControl.AccessControlType]::Allow
+    $itTeam,                                                  # Identity
+    $rights,                                                  # FileSystemRights
+    $inherit,                                                 # InheritanceFlags
+    [System.Security.AccessControl.PropagationFlags]::None,   # PropagationFlags
+    [System.Security.AccessControl.AccessControlType]::Allow  # AccessControlType
 )))
-$rootitem.SetAccessControl($acl)
-$rootitem = Get-Item $"FolderPath\$($children[1])"
-$acl  = $rootitem.GetAccessControl('Access')
+$childItem.SetAccessControl($acl)
+
+# Sales
+$childItem = Get-Item "$FolderPath\$($children[1])"
+$acl = $childItem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $salesTeam,
     $rights,
-    $inherit,    
-    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+    $inherit,
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
 )))
-$rootitem.SetAccessControl($acl)
-$rootitem = Get-Item $"FolderPath\$($children[2])"
-$acl  = $rootitem.GetAccessControl('Access')
+$childItem.SetAccessControl($acl)
+
+# Adm
+$childItem = Get-Item "$FolderPath\$($children[2])"
+$acl = $childItem.GetAccessControl('Access')
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $admteam,
     $rights,
     $inherit,
-    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
 )))
-$rootitem.SetAccessControl($acl)
-write-Output "Department subfolders created and permissions applied."
+$childItem.SetAccessControl($acl)
+
+Write-Output "Department subfolders created and permissions applied."
