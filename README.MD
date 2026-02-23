@@ -22,3 +22,7 @@ Disse skriptene er resultatet av testing av forskjellige metoder, som har ført 
 ## Bruk
 
 Se de enkelte skriptene for detaljerte instruksjoner.
+
+# todo
+
+domene skal være en variabel i alle script.
