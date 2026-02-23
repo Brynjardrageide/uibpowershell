@@ -64,12 +64,22 @@ if (-not $PostConfig) {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
     Write-Ok "Scheduled Task '$TaskName' registered to run after reboot."
 
-    Write-Info "Installing WSUS role with your exact command (this will reboot automatically)..."
-    # Your requested installer command:
-    Install-WindowsFeature -Name UpdateServices -IncludeManagementTools -Restart
+    Write-Info "Installing WSUS role with your exact command (installer will request a reboot if needed)..."
+    # Run installer and capture result so we only reboot if required.
+    $installResult = Install-WindowsFeature -Name UpdateServices -IncludeManagementTools -ErrorAction Stop
 
-    # If the server didn't restart for any reason, force it (normally not needed).
-    Write-Warn "Install-WindowsFeature did not trigger a restart; forcing reboot now..."
+    # Some platforms return RestartNeeded or RebootRequired; handle both safely.
+    if ($installResult.PSObject.Properties.Name -contains 'RestartNeeded' -and $installResult.RestartNeeded -eq $true) {
+        Write-Info "Install requested restart; exiting to allow reboot."
+        return
+    }
+    if ($installResult.PSObject.Properties.Name -contains 'RebootRequired' -and $installResult.RebootRequired -eq $true) {
+        Write-Info "Install requested reboot; exiting to allow reboot."
+        return
+    }
+
+    # Fallback: if neither property is present, be conservative and force a reboot so the post-config task can run in a clean boot state.
+    Write-Warn "Install-WindowsFeature did not explicitly request a restart; forcing reboot now..."
     Restart-Computer -Force
     return
 }
@@ -79,9 +89,15 @@ Start-Transcript -Path $LogFile -Force | Out-Null
 try {
     Write-Info "Phase 2: Post-reboot WSUS postinstall and configuration starting..."
 
-    # Ensure wsusutil exists
+    # Ensure wsusutil exists: wait a bit for the role installation to finish and wsusutil to appear.
+    $maxWait = [TimeSpan]::FromMinutes(10)
+    $start   = Get-Date
+    while (-not (Test-Path $WsusUtil) -and ((Get-Date) - $start -lt $maxWait)) {
+        Write-Info "wsusutil.exe not found yet at '$WsusUtil'; sleeping 15s and retrying..."
+        Start-Sleep -Seconds 15
+    }
     if (-not (Test-Path $WsusUtil)) {
-        throw "wsusutil.exe not found at '$WsusUtil'. Verify WSUS role installed correctly."
+        throw "wsusutil.exe not found at '$WsusUtil' after waiting $($maxWait.TotalMinutes) minutes. Verify WSUS role installed correctly."
     }
 
     # Run wsusutil postinstall (even if we don't store binaries locally, this step initializes DB & IIS)
@@ -218,18 +234,22 @@ try {
     }
 
     Write-Ok "WSUS configuration completed successfully."
-
-    # Remove the one-time Scheduled Task so it doesn't re-run
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($task) {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-        Write-Ok "Removed Scheduled Task '$TaskName'."
-    }
 }
 catch {
     Write-Err "FATAL: $($_.Exception.Message)"
     throw
 }
 finally {
+    # Ensure the one-time Scheduled Task is removed regardless of success/failure so it doesn't re-run on every boot.
+    try {
+        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        if ($task) {
+            Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
+            Write-Ok "Removed Scheduled Task '$TaskName'."
+        }
+    } catch {
+        Write-Warn "Failed to remove Scheduled Task '$TaskName': $($_.Exception.Message)"
+    }
+
     Stop-Transcript | Out-Null
 }
