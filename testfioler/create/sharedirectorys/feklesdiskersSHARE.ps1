@@ -1,7 +1,7 @@
 <#
-Script:     Create-DeptShareRoot.ps1
-Purpose:    Create root share and department subfolders with proper share + NTFS permissions.
-Run on:     The FILE SERVER (as Administrator)
+Script: Create-HomeShareRoot.ps1
+Purpose: Create the root folder and share for home directories with correct permissions.
+Run on: The FILE SERVER (as Administrator)
 #>
 
 param(
@@ -10,16 +10,30 @@ param(
     [switch]$HideFolder
 )
 
-# Department children (adjust casing to your preference)
-$children = @('IT','SAlg','adm')
+# children folders for department shares will be created under this root, e.g. C:\Shares\FELLES\IT, C:\Shares\FELLES\SALES, etc.
+<#
+Note: You can create the root share with more open permissions 
+(e.g. allow Authenticated Users to create subfolders) and then create 
+department subfolders with more restrictive permissions 
+(e.g. only allow the specific department group to access their folder). This way you can 
+have a single share for all departments but still maintain security boundaries at the folder level.
+#>
 
-# Accounts / Groups
-$admins     = New-Object System.Security.Principal.NTAccount('BUILTIN','Administrators')
-$system     = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','SYSTEM')
-$auth       = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','Authenticated Users')
-$itTeam     = New-Object System.Security.Principal.NTAccount('DRAGEIDE','ITTeam')
-$salesTeam  = New-Object System.Security.Principal.NTAccount('DRAGEIDE','salg')
-$admTeam    = New-Object System.Security.Principal.NTAccount('DRAGEIDE','adm')
+$children =@(
+    "IT",
+    "SAlg",
+    "adm"
+)
+
+
+# Accounts
+$admins  = New-Object System.Security.Principal.NTAccount('BUILTIN','Administrators')
+$system  = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','SYSTEM')
+$auth    = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','Authenticated Users')
+$itTeam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','ITTeam')
+$salesTeam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','salg')
+$admteam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','adm')
+
 
 # Ensure admin
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -28,14 +42,14 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit 1
 }
 
-# Create root folder
+# Create folder
 New-Item -Path $FolderPath -ItemType Directory -Force | Out-Null
 if ($HideFolder) {
     $item = Get-Item $FolderPath
     $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
 }
 
-# Create / Fix share
+# Create / fix share (Change for Authenticated Users)
 if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
     New-SmbShare `
         -Name $ShareName `
@@ -44,45 +58,40 @@ if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
         -ChangeAccess "NT AUTHORITY\Authenticated Users" `
         -FolderEnumerationMode AccessBased `
         -CachingMode None `
-        -Description "Department Root" | Out-Null
+        -Description "Home Share Root" | Out-Null
 } else {
     Set-SmbShare -Name $ShareName -FolderEnumerationMode AccessBased -CachingMode None
     Revoke-SmbShareAccess -Name $ShareName -AccountName Everyone -Force -ErrorAction SilentlyContinue
-    Grant-SmbShareAccess  -Name $ShareName -AccountName "BUILTIN\Administrators"          -AccessRight Full   -Force
-    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\SYSTEM"             -AccessRight Full   -Force
-    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\Authenticated Users"-AccessRight Change -Force
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "BUILTIN\Administrators" -AccessRight Full   -Force
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\SYSTEM"   -AccessRight Full   -Force
+    Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\Authenticated Users" -AccessRight Change -Force
 }
 
-# ---------------------------
-# NTFS: Root folder
-# ---------------------------
+# NTFS ACLs (root)
 $root = Get-Item -Path $FolderPath
 $acl  = $root.GetAccessControl('Access')
 
-# Start clean: disable inheritance and remove existing explicit ACEs
+# Disable inheritance and remove existing explicit ACEs to start clean
 $acl.SetAccessRuleProtection($true, $false)
-foreach ($rule in $acl.Access) { $null = $acl.RemoveAccessRule($rule) }
+foreach ($rule in $acl.Access) { $acl.RemoveAccessRule($rule) | Out-Null }
 
-# Admins + SYSTEM: Full Control (inherit to all)
-$inheritAll = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit `
-            -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
-
+# Admins + SYSTEM: Full (inherit to all)
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $admins,
     [System.Security.AccessControl.FileSystemRights]::FullControl,
-    $inheritAll,
+    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
 )))
 $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
     $system,
     [System.Security.AccessControl.FileSystemRights]::FullControl,
-    $inheritAll,
+    ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
     [System.Security.AccessControl.PropagationFlags]::None,
     [System.Security.AccessControl.AccessControlType]::Allow
 )))
 
-# Authenticated Users: THIS FOLDER ONLY (to allow creating dept subfolders at the root, optional)
+# Authenticated Users: allow creating subfolders at root (THIS FOLDER ONLY)
 $rightsAuth =
       [System.Security.AccessControl.FileSystemRights]::CreateDirectories `
     -bor [System.Security.AccessControl.FileSystemRights]::AppendData `
@@ -100,15 +109,26 @@ $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRu
     [System.Security.AccessControl.AccessControlType]::Allow
 )))
 
+
 $root.SetAccessControl($acl)
 
-Write-Output "Root NTFS permissions applied."
+Write-Output "Home share '$ShareName' created and NTFS permissions applied."
 
-# ---------------------------
-# Create department subfolders
-# ---------------------------
-foreach ($child in $children) {
-    $childPath = Join-Path $FolderPath $child
+
+# this is for groups spesific permissions on department subfolders, e.g. ITTeam gets FullControl on IT folder, etc.
+# reuseble variables for rights and inheritance flags
+# Reusable variables for department rights and inheritance flags
+$rights =
+    [System.Security.AccessControl.FileSystemRights]::Modify `
+    -bor [System.Security.AccessControl.FileSystemRights]::ReadAndExecute `
+
+# Apply to subfolders and files
+$inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit `
+         -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+
+# Create all department subfolders
+for ($i = 0; $i -lt $children.Count; $i++) {
+    $childPath = Join-Path $FolderPath $children[$i]
     if (-not (Test-Path $childPath)) {
         New-Item -Path $childPath -ItemType Directory -Force | Out-Null
         Write-Output "Created child folder: $childPath"
@@ -117,92 +137,40 @@ foreach ($child in $children) {
     }
 }
 
-# ---------------------------
-# NTFS: Department ACLs
-# ---------------------------
+# IT
+$childItem = Get-Item "$FolderPath\$($children[0])"
+$acl = $childItem.GetAccessControl('Access')
+$acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $itTeam,                                                  # Identity
+    $rights,                                                  # FileSystemRights
+    $inherit,                                                 # InheritanceFlags
+    [System.Security.AccessControl.PropagationFlags]::None,   # PropagationFlags
+    [System.Security.AccessControl.AccessControlType]::Allow  # AccessControlType
+)))
+$childItem.SetAccessControl($acl)
 
-# Build a hashtable of department -> group
-$deptMap = @{
-    'IT'   = $itTeam
-    'SAlg' = $salesTeam
-    'adm'  = $admTeam
-}
+# Sales
+$childItem = Get-Item "$FolderPath\$($children[1])"
+$acl = $childItem.GetAccessControl('Access')
+$acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $salesTeam,
+    $rights,
+    $inherit,
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
+)))
+$childItem.SetAccessControl($acl)
 
-# Define Modify rights (canonical Modify mask)
-$modifyRights =
-      [System.Security.AccessControl.FileSystemRights]::Modify
-# If you prefer explicit expansion instead of Modify:
-# $modifyRights =
-#     [System.Security.AccessControl.FileSystemRights]::ReadAndExecute `
-#   -bor [System.Security.AccessControl.FileSystemRights]::ListDirectory `
-#   -bor [System.Security.AccessControl.FileSystemRights]::ReadAttributes `
-#   -bor [System.Security.AccessControl.FileSystemRights]::ReadExtendedAttributes `
-#   -bor [System.Security.AccessControl.FileSystemRights]::ReadPermissions `
-#   -bor [System.Security.AccessControl.FileSystemRights]::Write `
-#   -bor [System.Security.AccessControl.FileSystemRights]::WriteAttributes `
-#   -bor [System.Security.AccessControl.FileSystemRights]::WriteExtendedAttributes `
-#   -bor [System.Security.AccessControl.FileSystemRights]::AppendData `
-#   -bor [System.Security.AccessControl.FileSystemRights]::Delete `
-#   -bor [System.Security.AccessControl.FileSystemRights]::Synchronize
+# Adm
+$childItem = Get-Item "$FolderPath\$($children[2])"
+$acl = $childItem.GetAccessControl('Access')
+$acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $admteam,
+    $rights,
+    $inherit,
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
+)))
+$childItem.SetAccessControl($acl)
 
-$propNone = [System.Security.AccessControl.PropagationFlags]::None
-
-foreach ($child in $children) {
-    $childPath = Join-Path $FolderPath $child
-    $childItem = Get-Item $childPath
-    $acl = $childItem.GetAccessControl('Access')
-
-    # Break inheritance, COPY existing ACEs so Admins/SYSTEM stay; then we'll prune AU if present
-    $acl.SetAccessRuleProtection($true, $true)
-
-    # Remove any Authenticated Users ACEs that may have flowed down
-    foreach ($rule in $acl.Access | Where-Object { $_.IdentityReference -eq $auth }) {
-        $null = $acl.RemoveAccessRuleSpecific($rule)
-    }
-
-    # Ensure Admins + SYSTEM Full Control (inherit to all)
-    $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $admins,
-        [System.Security.AccessControl.FileSystemRights]::FullControl,
-        $inheritAll,
-        $propNone,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )))
-    $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $system,
-        [System.Security.AccessControl.FileSystemRights]::FullControl,
-        $inheritAll,
-        $propNone,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )))
-
-    # Department group: Modify (inherit to all)
-    $deptGroup = $deptMap[$child]
-    if ($null -eq $deptGroup) {
-        Write-Warning "No group mapped for child '$child' – skipping dept ACL."
-    } else {
-        $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $deptGroup,
-            $modifyRights,
-            $inheritAll,
-            $propNone,
-            [System.Security.AccessControl.AccessControlType]::Allow
-        )))
-    }
-
-    # Optional: CREATOR OWNER Full Control on subfolders/files only (good practice)
-    $creatorOwner = New-Object System.Security.Principal.NTAccount('CREATOR OWNER')
-    $acl.AddAccessRule( (New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $creatorOwner,
-        [System.Security.AccessControl.FileSystemRights]::FullControl,
-        # Files and subfolders only:
-        ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
-        [System.Security.AccessControl.PropagationFlags]::InheritOnly,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )))
-
-    $childItem.SetAccessControl($acl)
-    Write-Output "Applied ACLs to: $childPath"
-}
-
-Write-Output "Department subfolders created and permissions applied (Admins=Full, Dept=Modify)."
+Write-Output "Department subfolders created and permissions applied."
