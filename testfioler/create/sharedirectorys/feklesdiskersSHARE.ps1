@@ -127,7 +127,7 @@ $rights =
 $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit `
          -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
 
-
+# makes all the department subfolders and applies permissions for the respective groups
 for ($i = 0; $i -lt $children.Count; $i++) {
     $childPath = Join-Path $FolderPath $children[$i]
     New-Item -Path $childPath -ItemType Directory -Force | Out-Null
