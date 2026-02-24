@@ -35,24 +35,29 @@ $SyncfieldMap = @{
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 $userinfo = Get-eployeeFromCsv -filePath "C:\Users\Administrator\Documents\csv\brukere.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 foreach ($user in $userinfo) {
-    if (user.ou -eq "" -or user.ou -eq $null) {
-        <# Action to perform if the condition is true #>
-        $user.ou = "brukere"
+    if (Get-ADUser -LDAPFilter "(employeeID=$($user.EmployeeID))" -ErrorAction SilentlyContinue) {
+        Write-Host "User with EmployeeID $($user.EmployeeID) already exists. Skipping..." -ForegroundColor Yellow
+        continue
+    }else {
+        if ($user.ou -eq "" -or $user.ou -eq $null) {
+            <# Action to perform if the condition is true #>
+            $user.ou = "brukere"
+        }
+        $OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
+        $Domain = "drageide.com"
+        $Email = "$($user.Givenname).$($user.Surname)@$Domain"
+        New-ADUser `
+            -EmployeeID $user.EmployeeID `
+            -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
+            -GivenName $user.GivenName `
+            -Surname $user.Surname `
+            -Name "$($user.GivenName) $($user.Surname)" `
+            -SamAccountName "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))" `
+            -Path $OU `
+            -EmailAddress $Email `
+            -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) `
+            -Enabled $true `
+            -PasswordNeverExpires $false `
+            -ChangePasswordAtLogon $false
     }
-    $OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
-    $Domain = "drageide.com"
-    $Email = "$($user.Givenname).$($user.Surname)@$Domain"
-    New-ADUser `
-        -EmployeeID $user.EmployeeID `
-        -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
-        -GivenName $user.GivenName `
-        -Surname $user.Surname `
-        -Name "$($user.GivenName) $($user.Surname)" `
-        -SamAccountName "$($user.GivenName.Substring(0,2))$($user.Surname.Substring(0,3))" `
-        -Path $OU `
-        -EmailAddress $Email `
-        -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) `
-        -Enabled $true `
-        -PasswordNeverExpires $false `
-        -ChangePasswordAtLogon $false
 }

@@ -1,6 +1,8 @@
-EmployeeID,Firstname,Lastname,phone
+EmployeeID,Firstname,Lastname,phone,ou
 1000111,Kjersti,Drageide,
 1000112,Eskil,Drageide,
 1000113,Ragna,Drageide,
 1000114,Keneth,Drageide,
 1000115,Luna,Drageide,
+1000116,brynjar,drageide,,it
+1000117,vidar,drageide,,it
