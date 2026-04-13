@@ -1,5 +1,9 @@
 Import-Module ActiveDirectory
 
+# VARIABLES 
+$Domain = "drageide"
+$deafoultou = "OU=users,OU=drageideou,DC=$domain,DC=com"
+
 # INPUT CSV
 $CsvPath = "C:\Users\Administrator\Documents\csv\brukere.csv"
 $Delimiter = ","
@@ -38,7 +42,7 @@ $SyncfieldMap = @{
 }
 
 # CSV MAPPING FUNCTION
-function Get-eployeeFromCsv {
+function Get-employeeFromCsv {
     param ($filePath,$Delimiter,$SyncfieldMap)
     $SyncProperties=$SyncfieldMap.GetEnumerator()
     $properties=foreach($property in $SyncProperties){
@@ -48,7 +52,7 @@ function Get-eployeeFromCsv {
 }
 
 # Read CSV
-$Users = Get-eployeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $SyncfieldMap
+$Users = Get-meployeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $SyncfieldMap
 
 # Prepare output CSV
 $OutputData = @()
@@ -66,8 +70,8 @@ foreach ($user in $Users) {
             $user.ou = "brukere"
         }
       
-        $OU = "OU=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
-        $Domain = "drageide.com"
+        $OU = "OU=$($user.ou),$deafoultou"
+        $Domain
       
         # Username: first 2 + first 3
         $sam = ($user.GivenName.Substring(0,[Math]::Min(2,$user.GivenName.Length)) +
@@ -92,12 +96,12 @@ foreach ($user in $Users) {
         New-ADUser `
             -EmployeeID $user.EmployeeID `
             -Name "$($user.GivenName) $($user.Surname)" `
-            -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain" `
+            -UserPrincipalName "$($user.GivenName).$($user.Surname)@$Domain.com" `
             -GivenName $user.GivenName `
             -Surname $user.Surname `
             -SamAccountName $sam `
             -Path $OU `
-            -EmailAddress "$($user.GivenName).$($user.Surname)@$Domain" `
+            -EmailAddress "$($user.GivenName).$($user.Surname)@$Domain.com" `
             -AccountPassword (ConvertTo-SecureString $Password -AsPlainText -Force) `
             -Enabled $true
       

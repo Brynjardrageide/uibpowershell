@@ -1,5 +1,11 @@
 # importererbrukere fra CSV-fil og legger dem til i Active Directory
 # csv-filen skal ha kolonnene: eployeeid, FirstName, LastName
+
+# variabler
+$domain = "drageide.com" # Domain name for email and AD user principal name
+$defaultOU = "ou=brukere,OU=users,OU=drageideou,DC=$domain,DC=com"  # Default OU if not specified in CSV
+$filename = "brukere.csv" # CSV file name
+
 function Get-eployeeFromCsv {
     [cmdletBinding()]
     param (
@@ -33,18 +39,18 @@ $SyncfieldMap = @{
     ou="ou"
 }
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
-$userinfo = Get-eployeeFromCsv -filePath "C:\Users\Administrator\Documents\csv\brukere.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
+$userinfo = Get-eployeeFromCsv -filePath ".\bulkusers_secure\$filename" -Delimiter "," -SyncfieldMap $SyncfieldMap
 foreach ($user in $userinfo) {
     if (Get-ADUser -LDAPFilter "(employeeID=$($user.EmployeeID))" -ErrorAction SilentlyContinue) {
         Write-Host "User with EmployeeID $($user.EmployeeID) already exists. Skipping..." -ForegroundColor Yellow
         continue
     }else {
-        if ($user.ou -eq "" -or $user.ou -eq $null) {
+        if ($user.ou -eq "" -or $null -eq $user.ou) {
             <# Action to perform if the condition is true #>
             $user.ou = "brukere"
         }
-        $OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
-        $Domain = "drageide.com"
+        $OU = "ou=$($user.ou),$defaultOU"
+
         $Email = "$($user.Givenname).$($user.Surname)@$Domain"
         New-ADUser `
             -EmployeeID $user.EmployeeID `
