@@ -1,6 +1,6 @@
 Import-Module ActiveDirectory
 
-# VARIABLES 
+# MARK: VARIABLES 
 $Domain = "drageide"
 $deafoultou = "OU=users,OU=drageideou,DC=$domain,DC=com"
 
@@ -11,6 +11,7 @@ $Delimiter = ","
 # OUTPUT CSV
 $OutputCsv = "C:\Users\Administrator\Documents\csv\brukere_output.csv"
 
+# MARK: Strong password generator
 # Strong password generator tidliere brukte askii tegn med (39..) til (126..) men det fungerte ikke coden var basert på .net framework som ai ga meg eg lagde det på nytt og etter det passordene ble laget men det var veldig lange fordi den og koden var c# og en string blir set på som en object og alt ble hentet så nå er det fikset med å bruke .ToCharArray() slik at det blir en array og da funker Get-Random -Count number 
 function New-StrongPassword {
     param([int]$Length = 12)
@@ -32,6 +33,7 @@ function New-StrongPassword {
     return -join ($password.ToCharArray() | Sort-Object {Get-Random})
 }
 
+# MARK: CSV ARBEID
 # MAP CSV FIELDS
 $SyncfieldMap = @{
     EmployeeID="EmployeeID"
@@ -58,6 +60,7 @@ $Users = Get-meployeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $Sy
 $OutputData = @()
 $OutputData += "GivenName,Surname,Username,Password,Timestamp`n"
 
+# MARK: Process each user OG CREATE USER
 foreach ($user in $Users) {
     if (Get-ADUser -LDAPFilter "(employeeID=$($user.EmployeeID))" -ErrorAction SilentlyContinue) {
         Write-Host "User with EmployeeID $($user.EmployeeID) already exists. Skipping..." -ForegroundColor Yellow
@@ -111,7 +114,7 @@ foreach ($user in $Users) {
     
 }
 
-# Write output file
+# MARK: Write output file
 $dir = Split-Path $OutputCsv -Parent
 if (!(Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force }
 

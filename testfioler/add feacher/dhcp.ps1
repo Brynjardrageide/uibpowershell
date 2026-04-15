@@ -5,7 +5,7 @@ Install-WindowsFeature DHCP -IncludeManagementTools
 Import-Module DhcpServer
 
 # -----------------------------
-# VARIABLES
+# MARK: VARIABLES
 # -----------------------------
 $nicAlias     = "Ethernet 2"
 
@@ -21,8 +21,13 @@ $scopeId      = "192.168.5.0"
 $subnetMask   = "255.255.255.0"
 
 # -----------------------------
-# Configure Static IP on Ethernet 2
+# MARK: Configure Static IP on Ethernet 2
 # -----------------------------
+
+# Disable IPv6 on ALL adapters
+Get-NetAdapterBinding -ComponentID ms_tcpip6 |
+    Disable-NetAdapterBinding -ComponentID ms_tcpip6 -Confirm:$false
+    
 Get-NetIPAddress -InterfaceAlias $nicAlias -AddressFamily IPv4 |
     Remove-NetIPAddress -Confirm:$false
 
