@@ -1,5 +1,7 @@
 # when i ad adds running my autodcmaster it adds dns but not all needed for reverce lookup zone
 Import-Module DnsServer -ErrorAction Stop
+
+# MARK: Define variables
 $zoneName = "1.168.192.in-addr.arpa"
 $zoneExists = Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue
 $eth1 = Get-NetAdapter | Where-Object { $_.Name -eq "Ethernet" } | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq "IPv4" }

@@ -4,10 +4,10 @@
 
 #dette er forhonds arbeide til domene controlleren
 
-$varipadress = "192.168.1.3"
+$varipadress = "192.168.1.3" # ip adress for server
 # Change computer name as needed UNDER TESTING IT WAS C1 ive changed it as it wil be in production soon
-$varComputername = "dmmasterdc1"
-$deafaultgateway  = "192.168.1.1"
+$varComputername = "dmmasterdc1"    # server name
+$deafaultgateway  = "192.168.1.1"   # default gateway
 
 
 $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "C:\windows\setup\files\simpletask3.ps1"

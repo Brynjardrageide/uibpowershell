@@ -1,5 +1,5 @@
 Import-Module ActiveDirectory
-
+# MARK: VARIABLES
 $user = @{
     EmployeeID = Read-Host "Enter EmployeeID"
     GivenName = Read-Host "Enter GivenName"
@@ -12,6 +12,8 @@ if ($user.ou -eq "" -or $null -eq $user.ou) {
 }
 
 $OU = "ou=$($user.ou),OU=users,OU=drageideou,DC=drageide,DC=com"
+
+# MARK: ERROR HANDLING
 # test in if the OU exists before trying to create the user and if the employeeid already exists in AD employee id should be unique and not already exist in AD
 if (Get-ADUser -Filter "EmployeeID -eq '$($user.EmployeeID)'" -ErrorAction SilentlyContinue) {
     Write-Host "A user with EmployeeID '$($user.EmployeeID)' already exists. Please use a unique EmployeeID." -ForegroundColor Red
@@ -23,7 +25,7 @@ if (-not (Get-ADOrganizationalUnit -Filter "DistinguishedName -eq '$OU'" -ErrorA
 }
 
 
-
+# MARK: CREATE USER
 $Domain = "drageide.com"
 $Email = "$($user.Givenname).$($user.Surname)@$Domain"
 New-ADUser `

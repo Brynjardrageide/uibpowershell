@@ -1,5 +1,5 @@
 Import-Module ActiveDirectory -ErrorAction Stop
-
+# MARK: functions
 function EnsureOU {
     [CmdletBinding()]
     param(
@@ -73,6 +73,7 @@ function EnsureOU {
     }
 }
 
+# MARK: variables for OU
 # Domain DN and OU names
 $domainDN = "DC=drageide,DC=com"
 $rootOUName = "drageideou"

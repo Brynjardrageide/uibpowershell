@@ -1,4 +1,5 @@
-# Variables¨
+# MARK:
+# Variables
 # Domain and NetBIOS names change as needed | i changed it to what it will be in production soon
 $DOMAIN = "drageide.com"
 $NETBIOSDOMAIN = "DRAGEIDE"

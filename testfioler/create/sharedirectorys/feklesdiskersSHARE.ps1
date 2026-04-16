@@ -19,20 +19,22 @@ department subfolders with more restrictive permissions
 have a single share for all departments but still maintain security boundaries at the folder level.
 #>
 
+# MARK: Define department subfolder names
 $children =@(
     "IT",
     "SAlg",
     "adm"
 )
 
-
+# MARK: variables
+$domain = 'DRAGEIDE' # change to your domain
 # Accounts
 $admins  = New-Object System.Security.Principal.NTAccount('BUILTIN','Administrators')
 $system  = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','SYSTEM')
 $auth    = New-Object System.Security.Principal.NTAccount('NT AUTHORITY','Authenticated Users')
-$itTeam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','ITTeam')
-$salesTeam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','salg')
-$admteam   = New-Object System.Security.Principal.NTAccount('DRAGEIDE','adm')
+$itTeam   = New-Object System.Security.Principal.NTAccount($domain,'ITTeam')
+$salesTeam   = New-Object System.Security.Principal.NTAccount($domain,'salg')
+$admteam   = New-Object System.Security.Principal.NTAccount($domain,'adm')
 
 
 # Ensure admin

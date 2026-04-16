@@ -1,11 +1,13 @@
 # importererbrukere fra CSV-fil og legger dem til i Active Directory
 # csv-filen skal ha kolonnene: eployeeid, FirstName, LastName
 
-# variabler
+# MARK: variabler
 $domain = "drageide.com" # Domain name for email and AD user principal name
 $defaultOU = "ou=brukere,OU=users,OU=drageideou,DC=$domain,DC=com"  # Default OU if not specified in CSV
 $filename = "brukere.csv" # CSV file name
 
+
+# MARK: CSV ARBEID
 function Get-eployeeFromCsv {
     [cmdletBinding()]
     param (
@@ -40,6 +42,8 @@ $SyncfieldMap = @{
 }
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
 $userinfo = Get-eployeeFromCsv -filePath ".\bulkusers_secure\$filename" -Delimiter "," -SyncfieldMap $SyncfieldMap
+
+# MARK: laging av brukere
 foreach ($user in $userinfo) {
     if (Get-ADUser -LDAPFilter "(employeeID=$($user.EmployeeID))" -ErrorAction SilentlyContinue) {
         Write-Host "User with EmployeeID $($user.EmployeeID) already exists. Skipping..." -ForegroundColor Yellow

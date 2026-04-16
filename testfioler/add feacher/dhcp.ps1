@@ -52,7 +52,7 @@ Add-DhcpServerInDC `
     -IpAddress $serverIP
 
 # -----------------------------
-# Create and Activate DHCP Scope
+# MARK: Create and Activate DHCP Scope
 # -----------------------------
 Add-DhcpServerv4Scope `
     -Name $scopeName `

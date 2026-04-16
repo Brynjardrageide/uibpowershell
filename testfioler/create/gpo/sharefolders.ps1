@@ -27,7 +27,7 @@
     .\sharefolders.ps1 -GpoName "MapHomeDrive" -LinkTarget "OU=Staff,DC=contoso,DC=com" -Domain contoso.com
 
 #>
-
+# MARK: parameters
 param(
         [string]$GpoName = "ShareFoldersGPO",
         [Parameter(Mandatory=$true)][string]$LinkTarget,
@@ -43,6 +43,7 @@ if (-not (Get-Module -ListAvailable -Name GroupPolicy)) {
 }
 Import-Module GroupPolicy
 
+# MARK: main logic
 try {
         Write-Output "Creating GPO '$GpoName' in domain '$Domain'..."
         $gpo = New-GPO -Name $GpoName -Domain $Domain -Comment $Comment -ErrorAction Stop

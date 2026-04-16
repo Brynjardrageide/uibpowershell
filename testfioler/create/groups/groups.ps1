@@ -1,4 +1,7 @@
 Import-Module ActiveDirectory
+
+# MARK: functions
+# Helper: create group with parameters, with some defaults (e.g. SamAccountName from Name)
 function  New-ADGroupWithParams {
     param (
         [string]$Name,
@@ -14,27 +17,6 @@ function  New-ADGroupWithParams {
         -GroupCategory $GroupCategory `
         -Path $Path
 }
-
-# variabler for gruppeopprettelse
-$groupPath = "OU=Groups,OU=drageideou,DC=drageide,DC=com"
-$brukere = "brukere"
-$it = "ITTeam"
-
-
-# opprett grupper
-New-ADGroupWithParams -Name $brukere -Path $groupPath
-New-ADGroupWithParams -Name $it -Path $groupPath
-
-# adding members to groups
-
-# Resolve groups (safer than relying only on names)
-$itGroup       = Get-ADGroup -Identity $it -ErrorAction Stop
-$brukereGroup  = Get-ADGroup -Identity $brukere -ErrorAction Stop
-
-# Get users from OUs
-$itUsers = Get-ADUser -SearchBase "OU=IT,OU=Users,OU=drageideou,DC=drageide,DC=com" -Filter * -ErrorAction Stop
-$otherUsers = Get-ADUser -SearchBase "OU=Sales,OU=Users,OU=drageideou,DC=drageide,DC=com" -Filter * -ErrorAction Stop
-
 # Helper: add only users that aren't already members
 function Add-MembersIfMissing {
     param(
@@ -61,6 +43,26 @@ function Add-MembersIfMissing {
         Write-Host "All candidates are already members of '$($Group.Name)'."
     }
 }
+
+# MARK: variabler for gruppeopprettelse
+$groupPath = "OU=Groups,OU=drageideou,DC=drageide,DC=com"
+$brukere = "brukere"
+$it = "ITTeam"
+
+
+# opprett grupper
+New-ADGroupWithParams -Name $brukere -Path $groupPath
+New-ADGroupWithParams -Name $it -Path $groupPath
+
+# adding members to groups
+
+# Resolve groups (safer than relying only on names)
+$itGroup       = Get-ADGroup -Identity $it -ErrorAction Stop
+$brukereGroup  = Get-ADGroup -Identity $brukere -ErrorAction Stop
+
+# Get users from OUs
+$itUsers = Get-ADUser -SearchBase "OU=IT,OU=Users,OU=drageideou,DC=drageide,DC=com" -Filter * -ErrorAction Stop
+$otherUsers = Get-ADUser -SearchBase "OU=Sales,OU=Users,OU=drageideou,DC=drageide,DC=com" -Filter * -ErrorAction Stop
 
 # Add users to groups
 Add-MembersIfMissing -Group $itGroup      -Members $itUsers

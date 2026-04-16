@@ -3,7 +3,7 @@ Script: Create-HomeShareRoot.ps1
 Purpose: Create the root folder and share for home directories with correct permissions.
 Run on: The FILE SERVER (as Administrator)
 #>
-
+# MARKS: parameters AND  variables
 param(
     [string]$FolderPath = 'C:\Shares\HomeShare',
     [string]$ShareName  = 'HomeShare$',
@@ -30,6 +30,7 @@ if ($HideFolder) {
     $item.Attributes = $item.Attributes -bor [IO.FileAttributes]::Hidden
 }
 
+# MARK: Create share and set permissions
 # Create / fix share (Change for Authenticated Users)
 if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
     New-SmbShare `
@@ -48,7 +49,9 @@ if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
     Grant-SmbShareAccess  -Name $ShareName -AccountName "NT AUTHORITY\Authenticated Users" -AccessRight Change -Force
 }
 
+# MARK: 
 # NTFS ACLs (root)
+# we need to set very spesific setings to allow users to create their own folders but not see or access others' folders - this is a common setup for home directory shares
 $root = Get-Item -Path $FolderPath
 $acl  = $root.GetAccessControl('Access')
 
