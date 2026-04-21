@@ -56,7 +56,7 @@ foreach ($user in $userinfo) {
             $user.ou = "brukere"
         }
       
-        $OU = "OU=$($user.ou),$deafoultou"
+        $OU = "OU=$($user.ou),$defaultOU"
 
         $Email = "$($user.Givenname).$($user.Surname)@$Domain"
         New-ADUser `
