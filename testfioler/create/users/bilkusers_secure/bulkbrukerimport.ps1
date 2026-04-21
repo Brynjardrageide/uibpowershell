@@ -39,6 +39,7 @@ $SyncfieldMap = @{
     EmployeeID="EmployeeID"
     FirstName="GivenName"
     LastName="Surname"
+    phone="phone"
     ou="ou"
     passord="password"
 }
@@ -54,7 +55,7 @@ function Get-employeeFromCsv {
 }
 
 # Read CSV
-$Users = Get-meployeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $SyncfieldMap
+$Users = Get-employeeFromCsv -filePath $CsvPath -Delimiter "," -SyncfieldMap $SyncfieldMap
 
 # Prepare output CSV
 $OutputData = @()
@@ -106,6 +107,7 @@ foreach ($user in $Users) {
             -Path $OU `
             -EmailAddress "$($user.GivenName).$($user.Surname)@$Domain.com" `
             -AccountPassword (ConvertTo-SecureString $Password -AsPlainText -Force) `
+            -HomePhone $user.phone `
             -Enabled $true
       
         # Log output

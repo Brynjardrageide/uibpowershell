@@ -3,12 +3,13 @@
 
 # MARK: variabler
 $domain = "drageide.com" # Domain name for email and AD user principal name
-$defaultOU = "ou=brukere,OU=users,OU=drageideou,DC=$domain,DC=com"  # Default OU if not specified in CSV
+$domainshort = "drageide" # Short domain name for SAM account name
+$defaultOU = "OU=users,OU=drageideou,DC=$domainshort,DC=com"  # Default OU if not specified in CSV
 $filename = "brukere.csv" # CSV file name
 
 
 # MARK: CSV ARBEID
-function Get-eployeeFromCsv {
+function Get-employeeFromCsv {
     [cmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -37,11 +38,11 @@ $SyncfieldMap = @{
     EmployeeID="EmployeeID"
     FirstName="GivenName"
     LastName="Surname"
-    phone="telephoneNumber"
+    phone="phone"
     ou="ou"
 }
 # Get-eployeeFromCsv -filePath ".\testfioler\create\users.csv" -Delimiter "," -SyncfieldMap $SyncfieldMap
-$userinfo = Get-eployeeFromCsv -filePath ".\bulkusers_secure\$filename" -Delimiter "," -SyncfieldMap $SyncfieldMap
+$userinfo = Get-employeeFromCsv -filePath ".\bulkusers_secure\$filename" -Delimiter "," -SyncfieldMap $SyncfieldMap
 
 # MARK: laging av brukere
 foreach ($user in $userinfo) {
@@ -49,11 +50,13 @@ foreach ($user in $userinfo) {
         Write-Host "User with EmployeeID $($user.EmployeeID) already exists. Skipping..." -ForegroundColor Yellow
         continue
     }else {
-        if ($user.ou -eq "" -or $null -eq $user.ou) {
-            <# Action to perform if the condition is true #>
+        Write-Host "Creating user: $($user.GivenName) $($user.Surname)" -ForegroundColor Green
+        # Default OU
+        if ([string]::IsNullOrWhiteSpace($user.ou)) {
             $user.ou = "brukere"
         }
-        $OU = "ou=$($user.ou),$defaultOU"
+      
+        $OU = "OU=$($user.ou),$deafoultou"
 
         $Email = "$($user.Givenname).$($user.Surname)@$Domain"
         New-ADUser `
@@ -68,6 +71,7 @@ foreach ($user in $userinfo) {
             -AccountPassword (ConvertTo-SecureString "Passord01!" -AsPlainText -Force) `
             -Enabled $true `
             -PasswordNeverExpires $false `
+            -HomePhone $user.phone `
             -ChangePasswordAtLogon $false
     }
 }
